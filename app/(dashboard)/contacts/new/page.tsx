@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import PageHeader from '@/components/PageHeader'
+import Select from '@/components/ui/Select'
 import toast from 'react-hot-toast'
 import { Loader2 } from 'lucide-react'
 
@@ -77,12 +78,10 @@ export default function NewContactPage() {
           </div>
           <div>
             <label className={labelCls}>Source</label>
-            <select className={inputCls} value={form.contact_source} onChange={e => update('contact_source', e.target.value)}>
-              <option value="">Select source</option>
-              {['Website','Referral','Email Campaign','LinkedIn','Exhibition','Partner','Other'].map(s => (
-                <option key={s} value={s.toLowerCase().replace(' ', '_')}>{s}</option>
-              ))}
-            </select>
+            <Select value={form.contact_source} onValueChange={v => update('contact_source', v)}
+              placeholder="Select source" allowClear clearLabel="Not set"
+              options={['Website','Referral','Email Campaign','LinkedIn','Exhibition','Partner','Other']
+                .map(s => ({ value: s.toLowerCase().replace(' ', '_'), label: s }))} />
           </div>
         </div>
 

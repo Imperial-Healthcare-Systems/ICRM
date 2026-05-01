@@ -7,6 +7,7 @@ import toast from 'react-hot-toast'
 import { Loader2, Upload } from 'lucide-react'
 import { supabaseAnon } from '@/lib/supabase'
 
+import Select from '@/components/ui/Select'
 type Account = { id: string; name: string }
 type Contact = { id: string; first_name: string; last_name: string }
 
@@ -113,25 +114,18 @@ export default function NewDocumentPage() {
             </div>
             <div>
               <label className={labelCls}>Category</label>
-              <select className={inputCls} value={form.category} onChange={e => update('category', e.target.value)}>
-                {['contract','proposal','invoice','report','legal','general','other'].map(c => (
-                  <option key={c} value={c} className="capitalize">{c}</option>
-                ))}
-              </select>
+              <Select value={form.category} onValueChange={v => update('category', v)}
+              options={['contract','proposal','invoice','report','legal','general','other'].map(c => ({ value: c, label: c }))} />
             </div>
             <div>
               <label className={labelCls}>Account</label>
-              <select className={inputCls} value={form.account_id} onChange={e => update('account_id', e.target.value)}>
-                <option value="">None</option>
-                {accounts.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
-              </select>
+              <Select value={form.account_id} onValueChange={v => update('account_id', v)} placeholder="None" allowClear clearLabel="None"
+              options={accounts.map(a => ({ value: a.id, label: a.name }))} />
             </div>
             <div>
               <label className={labelCls}>Contact</label>
-              <select className={inputCls} value={form.contact_id} onChange={e => update('contact_id', e.target.value)}>
-                <option value="">None</option>
-                {contacts.map(c => <option key={c.id} value={c.id}>{c.first_name} {c.last_name ?? ''}</option>)}
-              </select>
+              <Select value={form.contact_id} onValueChange={v => update('contact_id', v)} placeholder="None" allowClear clearLabel="None"
+              options={contacts.map(c => ({ value: c.id, label: `${c.first_name} ${c.last_name ?? ''}` }))} />
             </div>
           </div>
         </div>

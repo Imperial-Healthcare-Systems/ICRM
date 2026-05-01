@@ -25,14 +25,19 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   const { id } = await params
   const body = await req.json()
 
+  const ALLOWED = ['name', 'contact_name', 'email', 'phone', 'website', 'category', 'gstin', 'pan', 'payment_terms', 'billing_address', 'bank_details', 'status', 'notes']
+  const updates = Object.fromEntries(Object.entries(body).filter(([k]) => ALLOWED.includes(k)))
+  if (!Object.keys(updates).length) return NextResponse.json({ error: 'No valid fields to update.' }, { status: 400 })
+
   const { data, error: dbError } = await supabaseAdmin
     .from('crm_vendors')
-    .update({ ...body, updated_at: new Date().toISOString() })
+    .update({ ...updates, updated_at: new Date().toISOString() })
     .eq('id', id).eq('org_id', orgId)
     .select('id').single()
 
-  if (dbError || !data) return NextResponse.json({ error: 'Vendor not found.' }, { status: 404 })
-  logAudit({ org_id: orgId, actor_id: actorId, action: 'vendor.updated', resource_type: 'crm_vendor', resource_id: id })
+  if (dbError) return NextResponse.json({ error: dbError.message }, { status: 500 })
+  if (!data) return NextResponse.json({ error: 'Vendor not found.' }, { status: 404 })
+  logAudit({ org_id: orgId, actor_id: actorId, action: 'vendor.updated', resource_type: 'crm_vendor', resource_id: id, meta: updates })
   return NextResponse.json({ data })
 }
 

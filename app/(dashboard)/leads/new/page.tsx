@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import PageHeader from '@/components/PageHeader'
+import Select from '@/components/ui/Select'
 import toast from 'react-hot-toast'
 import { Loader2 } from 'lucide-react'
 
@@ -74,28 +75,20 @@ export default function NewLeadPage() {
           </div>
           <div>
             <label className={labelCls}>Lead Source</label>
-            <select className={inputCls} value={form.lead_source} onChange={e => update('lead_source', e.target.value)}>
-              <option value="">Select source</option>
-              {['Website','Referral','Cold Call','Email Campaign','LinkedIn','WhatsApp','Exhibition','Partner','Other'].map(s => (
-                <option key={s} value={s.toLowerCase().replace(' ', '_')}>{s}</option>
-              ))}
-            </select>
+            <Select value={form.lead_source} onValueChange={v => update('lead_source', v)}
+              placeholder="Select source" allowClear clearLabel="Not set"
+              options={['Website','Referral','Cold Call','Email Campaign','LinkedIn','WhatsApp','Exhibition','Partner','Other']
+                .map(s => ({ value: s.toLowerCase().replace(' ', '_'), label: s }))} />
           </div>
           <div>
             <label className={labelCls}>Rating</label>
-            <select className={inputCls} value={form.rating} onChange={e => update('rating', e.target.value)}>
-              <option value="hot">🔥 Hot</option>
-              <option value="warm">🌡️ Warm</option>
-              <option value="cold">❄️ Cold</option>
-            </select>
+            <Select value={form.rating} onValueChange={v => update('rating', v)}
+              options={[{ value: 'hot', label: '🔥 Hot' }, { value: 'warm', label: '🌡️ Warm' }, { value: 'cold', label: '❄️ Cold' }]} />
           </div>
           <div>
             <label className={labelCls}>Status</label>
-            <select className={inputCls} value={form.lead_status} onChange={e => update('lead_status', e.target.value)}>
-              {['new','contacted','qualified','unqualified'].map(s => (
-                <option key={s} value={s} className="capitalize">{s.charAt(0).toUpperCase() + s.slice(1)}</option>
-              ))}
-            </select>
+            <Select value={form.lead_status} onValueChange={v => update('lead_status', v)}
+              options={['new','contacted','qualified','unqualified'].map(s => ({ value: s, label: s.charAt(0).toUpperCase() + s.slice(1) }))} />
           </div>
         </div>
 

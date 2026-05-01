@@ -6,6 +6,7 @@ import PageHeader from '@/components/PageHeader'
 import toast from 'react-hot-toast'
 import { Loader2 } from 'lucide-react'
 
+import Select from '@/components/ui/Select'
 export default function NewCampaignPage() {
   const router = useRouter()
   const [loading, setLoading] = useState(false)
@@ -60,11 +61,8 @@ export default function NewCampaignPage() {
             </div>
             <div>
               <label className={labelCls}>Type</label>
-              <select className={inputCls} value={form.type} onChange={e => update('type', e.target.value)}>
-                <option value="email">Email</option>
-                <option value="whatsapp">WhatsApp</option>
-                <option value="sms">SMS</option>
-              </select>
+              <Select value={form.type} onValueChange={v => update('type', v)}
+              options={[{ value: 'email', label: "Email" }, { value: 'whatsapp', label: "WhatsApp" }, { value: 'sms', label: "SMS" }]} />
             </div>
             <div>
               <label className={labelCls}>Schedule (optional)</label>

@@ -6,6 +6,7 @@ import { Brain, Sparkles, Mail, BarChart3, Loader2, Copy, Check, ChevronDown } f
 import toast from 'react-hot-toast'
 import clsx from 'clsx'
 
+import Select from '@/components/ui/Select'
 type Deal    = { id: string; title: string }
 type Contact = { id: string; first_name: string; last_name: string }
 type Account = { id: string; name: string }
@@ -193,12 +194,12 @@ export default function IntelligencePage() {
           </div>
           <div>
             <label className={labelCls}>Select {sumType.charAt(0).toUpperCase() + sumType.slice(1)}</label>
-            <select className={inputCls} value={sumId} onChange={e => setSumId(e.target.value)}>
-              <option value="">Choose…</option>
-              {sumType === 'deal' && deals.map(d => <option key={d.id} value={d.id}>{d.title}</option>)}
-              {sumType === 'contact' && contacts.map(c => <option key={c.id} value={c.id}>{c.first_name} {c.last_name}</option>)}
-              {sumType === 'account' && accounts.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
-            </select>
+            <Select value={sumId} onValueChange={v => setSumId(v)} placeholder="Choose…" allowClear clearLabel="Choose…"
+              options={
+                sumType === 'deal'    ? deals.map(d => ({ value: d.id, label: d.title })) :
+                sumType === 'contact' ? contacts.map(c => ({ value: c.id, label: `${c.first_name} ${c.last_name ?? ''}`.trim() })) :
+                                        accounts.map(a => ({ value: a.id, label: a.name }))
+              } />
           </div>
           <button onClick={runSummarize} disabled={loading || !sumId}
             className="flex items-center gap-2 bg-[#F47920] hover:bg-[#e06810] disabled:opacity-60 text-white font-semibold px-5 py-2.5 rounded-lg text-sm transition w-full justify-center">
@@ -219,26 +220,19 @@ export default function IntelligencePage() {
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className={labelCls}>Tone</label>
-              <select className={inputCls} value={emailTone} onChange={e => setEmailTone(e.target.value)}>
-                {['professional','friendly','urgent','formal','consultative'].map(t => (
-                  <option key={t} value={t} className="capitalize">{t.charAt(0).toUpperCase() + t.slice(1)}</option>
-                ))}
-              </select>
+              <Select value={emailTone} onValueChange={v => setEmailTone(v)}
+              options={['professional','friendly','urgent','formal','consultative'].map(t => ({ value: t, label: t.charAt(0).toUpperCase() + t.slice(1) }))} />
             </div>
             <div>
               <label className={labelCls}>Contact (optional)</label>
-              <select className={inputCls} value={emailContactId} onChange={e => setEmailContactId(e.target.value)}>
-                <option value="">No contact</option>
-                {contacts.map(c => <option key={c.id} value={c.id}>{c.first_name} {c.last_name}</option>)}
-              </select>
+              <Select value={emailContactId} onValueChange={v => setEmailContactId(v)} placeholder="No contact" allowClear clearLabel="No contact"
+              options={contacts.map(c => ({ value: c.id, label: `${c.first_name} ${c.last_name}` }))} />
             </div>
           </div>
           <div>
             <label className={labelCls}>Deal Context (optional)</label>
-            <select className={inputCls} value={emailDealId} onChange={e => setEmailDealId(e.target.value)}>
-              <option value="">No deal</option>
-              {deals.map(d => <option key={d.id} value={d.id}>{d.title}</option>)}
-            </select>
+            <Select value={emailDealId} onValueChange={v => setEmailDealId(v)} placeholder="No deal" allowClear clearLabel="No deal"
+              options={deals.map(d => ({ value: d.id, label: d.title }))} />
           </div>
           <div>
             <label className={labelCls}>Additional Context</label>

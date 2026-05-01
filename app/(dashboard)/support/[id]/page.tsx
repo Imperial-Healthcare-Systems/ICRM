@@ -7,6 +7,7 @@ import toast from 'react-hot-toast'
 import { Loader2, Send, Lock } from 'lucide-react'
 import clsx from 'clsx'
 
+import Select from '@/components/ui/Select'
 type Ticket = {
   id: string; ticket_number: string; title: string; description: string
   status: string; priority: string; type: string
@@ -144,25 +145,13 @@ export default function TicketDetailPage({ params }: { params: Promise<{ id: str
             <div className="space-y-3">
               <div>
                 <p className="text-slate-500 text-xs mb-1">Status</p>
-                <select
-                  value={ticket.status}
-                  onChange={e => updateField('status', e.target.value)}
-                  disabled={updating}
-                  className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-white text-xs focus:outline-none focus:border-[#F47920]/60 transition capitalize"
-                >
-                  {STATUS_OPTIONS.map(s => <option key={s} value={s} className="capitalize">{s.replace('_', ' ')}</option>)}
-                </select>
+                <Select value={ticket.status} onValueChange={v => updateField('status', v)} disabled={updating}
+              options={STATUS_OPTIONS.map(s => ({ value: s, label: s.replace('_', ' ') }))} />
               </div>
               <div>
                 <p className="text-slate-500 text-xs mb-1">Priority</p>
-                <select
-                  value={ticket.priority}
-                  onChange={e => updateField('priority', e.target.value)}
-                  disabled={updating}
-                  className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-white text-xs focus:outline-none focus:border-[#F47920]/60 transition"
-                >
-                  {PRIORITY_OPTIONS.map(p => <option key={p} value={p} className="capitalize">{p}</option>)}
-                </select>
+                <Select value={ticket.priority} onValueChange={v => updateField('priority', v)} disabled={updating}
+              options={PRIORITY_OPTIONS.map(p => ({ value: p, label: p }))} />
               </div>
               <div className="pt-1 space-y-1.5 text-xs">
                 <div className="flex justify-between text-slate-400">

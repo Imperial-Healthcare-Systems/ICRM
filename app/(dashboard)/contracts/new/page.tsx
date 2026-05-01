@@ -6,6 +6,7 @@ import PageHeader from '@/components/PageHeader'
 import toast from 'react-hot-toast'
 import { Loader2 } from 'lucide-react'
 
+import Select from '@/components/ui/Select'
 type Account = { id: string; name: string }
 
 export default function NewContractPage() {
@@ -70,32 +71,23 @@ export default function NewContractPage() {
             </div>
             <div>
               <label className={labelCls}>Account</label>
-              <select className={inputCls} value={form.account_id} onChange={e => update('account_id', e.target.value)}>
-                <option value="">Select account</option>
-                {accounts.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
-              </select>
+              <Select value={form.account_id} onValueChange={v => update('account_id', v)} placeholder="Select account" allowClear clearLabel="Select account"
+              options={accounts.map(a => ({ value: a.id, label: a.name }))} />
             </div>
             <div>
               <label className={labelCls}>Contract Type</label>
-              <select className={inputCls} value={form.contract_type} onChange={e => update('contract_type', e.target.value)}>
-                {['service','maintenance','license','nda','partnership','other'].map(t => (
-                  <option key={t} value={t} className="capitalize">{t}</option>
-                ))}
-              </select>
+              <Select value={form.contract_type} onValueChange={v => update('contract_type', v)}
+              options={['service','maintenance','license','nda','partnership','other'].map(t => ({ value: t, label: t }))} />
             </div>
             <div>
               <label className={labelCls}>Status</label>
-              <select className={inputCls} value={form.status} onChange={e => update('status', e.target.value)}>
-                {['draft','active','expired','terminated','renewed'].map(s => (
-                  <option key={s} value={s} className="capitalize">{s}</option>
-                ))}
-              </select>
+              <Select value={form.status} onValueChange={v => update('status', v)}
+              options={['draft','active','expired','terminated','renewed'].map(s => ({ value: s, label: s }))} />
             </div>
             <div>
               <label className={labelCls}>Currency</label>
-              <select className={inputCls} value={form.currency} onChange={e => update('currency', e.target.value)}>
-                {['INR','USD','EUR','GBP','AED'].map(c => <option key={c} value={c}>{c}</option>)}
-              </select>
+              <Select value={form.currency} onValueChange={v => update('currency', v)}
+              options={['INR','USD','EUR','GBP','AED'].map(c => ({ value: c, label: c }))} />
             </div>
             <div>
               <label className={labelCls}>Start Date</label>

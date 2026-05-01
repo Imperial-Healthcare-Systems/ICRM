@@ -7,6 +7,7 @@ import LineItemsEditor, { LineItem, computeTotals } from '@/components/LineItems
 import toast from 'react-hot-toast'
 import { Loader2 } from 'lucide-react'
 
+import Select from '@/components/ui/Select'
 type Vendor = { id: string; name: string }
 
 export default function NewPurchaseOrderPage() {
@@ -70,16 +71,13 @@ export default function NewPurchaseOrderPage() {
           <div className="grid grid-cols-2 gap-4">
             <div className="col-span-2 md:col-span-1">
               <label className={labelCls}>Vendor</label>
-              <select className={inputCls} value={form.vendor_id} onChange={e => update('vendor_id', e.target.value)}>
-                <option value="">Select vendor</option>
-                {vendors.map(v => <option key={v.id} value={v.id}>{v.name}</option>)}
-              </select>
+              <Select value={form.vendor_id} onValueChange={v => update('vendor_id', v)} placeholder="Select vendor" allowClear clearLabel="Select vendor"
+              options={vendors.map(v => ({ value: v.id, label: v.name }))} />
             </div>
             <div>
               <label className={labelCls}>Currency</label>
-              <select className={inputCls} value={form.currency} onChange={e => update('currency', e.target.value)}>
-                {['INR','USD','EUR','GBP','AED'].map(c => <option key={c} value={c}>{c}</option>)}
-              </select>
+              <Select value={form.currency} onValueChange={v => update('currency', v)}
+              options={['INR','USD','EUR','GBP','AED'].map(c => ({ value: c, label: c }))} />
             </div>
             <div>
               <label className={labelCls}>Issue Date</label>

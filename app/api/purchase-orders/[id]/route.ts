@@ -25,7 +25,10 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   const { id } = await params
   const body = await req.json()
 
-  const updates: Record<string, unknown> = { ...body, updated_at: new Date().toISOString() }
+  const ALLOWED = ['vendor_id', 'status', 'issue_date', 'expected_date', 'received_date', 'items', 'subtotal', 'tax_pct', 'total', 'currency', 'notes']
+  const updates: Record<string, unknown> = Object.fromEntries(Object.entries(body).filter(([k]) => ALLOWED.includes(k)))
+  if (!Object.keys(updates).length) return NextResponse.json({ error: 'No valid fields to update.' }, { status: 400 })
+  updates.updated_at = new Date().toISOString()
   if (body.status === 'received' && !body.received_date) {
     updates.received_date = new Date().toISOString().split('T')[0]
   }
@@ -36,8 +39,9 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     .eq('id', id).eq('org_id', orgId)
     .select('id').single()
 
-  if (dbError || !data) return NextResponse.json({ error: 'Purchase order not found.' }, { status: 404 })
-  logAudit({ org_id: orgId, actor_id: actorId, action: 'po.updated', resource_type: 'crm_purchase_order', resource_id: id })
+  if (dbError) return NextResponse.json({ error: dbError.message }, { status: 500 })
+  if (!data) return NextResponse.json({ error: 'Purchase order not found.' }, { status: 404 })
+  logAudit({ org_id: orgId, actor_id: actorId, action: 'po.updated', resource_type: 'crm_purchase_order', resource_id: id, meta: updates })
   return NextResponse.json({ data })
 }
 

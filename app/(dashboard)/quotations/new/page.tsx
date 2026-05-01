@@ -7,6 +7,7 @@ import LineItemsEditor, { LineItem, computeTotals } from '@/components/LineItems
 import toast from 'react-hot-toast'
 import { Loader2 } from 'lucide-react'
 
+import Select from '@/components/ui/Select'
 type Account = { id: string; name: string }
 type Contact = { id: string; first_name: string; last_name: string }
 
@@ -84,17 +85,13 @@ export default function NewQuotationPage() {
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className={labelCls}>Account</label>
-              <select className={inputCls} value={form.account_id} onChange={e => update('account_id', e.target.value)}>
-                <option value="">Select account</option>
-                {accounts.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
-              </select>
+              <Select value={form.account_id} onValueChange={v => update('account_id', v)} placeholder="Select account" allowClear clearLabel="Select account"
+              options={accounts.map(a => ({ value: a.id, label: a.name }))} />
             </div>
             <div>
               <label className={labelCls}>Contact</label>
-              <select className={inputCls} value={form.contact_id} onChange={e => update('contact_id', e.target.value)}>
-                <option value="">Select contact</option>
-                {contacts.map(c => <option key={c.id} value={c.id}>{c.first_name} {c.last_name ?? ''}</option>)}
-              </select>
+              <Select value={form.contact_id} onValueChange={v => update('contact_id', v)} placeholder="Select contact" allowClear clearLabel="Select contact"
+              options={contacts.map(c => ({ value: c.id, label: `${c.first_name} ${c.last_name ?? ''}` }))} />
             </div>
             <div>
               <label className={labelCls}>Valid Until</label>
@@ -102,9 +99,8 @@ export default function NewQuotationPage() {
             </div>
             <div>
               <label className={labelCls}>Currency</label>
-              <select className={inputCls} value={form.currency} onChange={e => update('currency', e.target.value)}>
-                {['INR','USD','EUR','GBP','AED'].map(c => <option key={c} value={c}>{c}</option>)}
-              </select>
+              <Select value={form.currency} onValueChange={v => update('currency', v)}
+              options={['INR','USD','EUR','GBP','AED'].map(c => ({ value: c, label: c }))} />
             </div>
           </div>
         </div>

@@ -6,6 +6,7 @@ import { Building2, Plus, Search, Globe, ChevronLeft, ChevronRight } from 'lucid
 import PageHeader from '@/components/PageHeader'
 import EmptyState from '@/components/EmptyState'
 
+import Select from '@/components/ui/Select'
 type Account = {
   id: string; name: string; website: string; industry: string
   account_type: string; phone: string; email: string
@@ -69,13 +70,8 @@ export default function AccountsPage() {
           <input type="text" placeholder="Search accounts…" value={search} onChange={e => setSearch(e.target.value)}
             className="w-full bg-[#0D1B2E] border border-white/10 rounded-lg pl-9 pr-4 py-2 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-[#F47920]/60 transition" />
         </div>
-        <select value={type} onChange={e => setType(e.target.value)}
-          className="bg-[#0D1B2E] border border-white/10 rounded-lg px-3 py-2 text-sm text-slate-300 focus:outline-none focus:border-[#F47920]/60 transition">
-          <option value="">All Types</option>
-          {['prospect','customer','partner','vendor','other'].map(t => (
-            <option key={t} value={t} className="capitalize">{t.charAt(0).toUpperCase() + t.slice(1)}</option>
-          ))}
-        </select>
+        <Select value={type} onValueChange={v => setType(v)} placeholder="All Types" allowClear clearLabel="All Types"
+              options={['prospect','customer','partner','vendor','other'].map(t => ({ value: t, label: t.charAt(0).toUpperCase() + t.slice(1) }))} />
       </div>
 
       <div className="bg-[#0D1B2E] border border-white/5 rounded-xl overflow-hidden">

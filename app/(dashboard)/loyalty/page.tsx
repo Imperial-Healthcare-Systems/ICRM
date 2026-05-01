@@ -7,6 +7,7 @@ import EmptyState from '@/components/EmptyState'
 import toast from 'react-hot-toast'
 import clsx from 'clsx'
 
+import Select from '@/components/ui/Select'
 type LoyaltyAccount = {
   id: string; tier: string; points_balance: number
   total_earned: number; total_redeemed: number; updated_at: string
@@ -148,21 +149,14 @@ export default function LoyaltyPage() {
             <form onSubmit={awardPoints} className="space-y-3">
               <div>
                 <label className="block text-xs font-medium text-slate-400 mb-1.5">Contact *</label>
-                <select className="w-full bg-white/5 border border-white/10 rounded-lg px-4 py-2.5 text-white text-sm focus:outline-none focus:border-[#F47920]/60 transition"
-                  value={awardForm.contact_id} onChange={e => setAwardForm(f => ({ ...f, contact_id: e.target.value }))}>
-                  <option value="">Select contact</option>
-                  {contacts.map(c => <option key={c.id} value={c.id}>{c.first_name} {c.last_name ?? ''}</option>)}
-                </select>
+                <Select value={awardForm.contact_id} onValueChange={v => setAwardForm(f => ({ ...f, contact_id: v }))} placeholder="Select contact" allowClear clearLabel="Select contact"
+              options={contacts.map(c => ({ value: c.id, label: `${c.first_name} ${c.last_name ?? ''}` }))} />
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block text-xs font-medium text-slate-400 mb-1.5">Type</label>
-                  <select className="w-full bg-white/5 border border-white/10 rounded-lg px-4 py-2.5 text-white text-sm focus:outline-none focus:border-[#F47920]/60 transition"
-                    value={awardForm.type} onChange={e => setAwardForm(f => ({ ...f, type: e.target.value }))}>
-                    <option value="earn">Earn</option>
-                    <option value="redeem">Redeem</option>
-                    <option value="adjust">Adjust</option>
-                  </select>
+                  <Select value={awardForm.type} onValueChange={v => setAwardForm(f => ({ ...f, type: v }))}
+              options={[{ value: 'earn', label: "Earn" }, { value: 'redeem', label: "Redeem" }, { value: 'adjust', label: "Adjust" }]} />
                 </div>
                 <div>
                   <label className="block text-xs font-medium text-slate-400 mb-1.5">Points *</label>

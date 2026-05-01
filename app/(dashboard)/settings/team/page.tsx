@@ -5,6 +5,7 @@ import { Users, UserPlus, Loader2, Shield, CheckCircle, XCircle } from 'lucide-r
 import toast from 'react-hot-toast'
 import clsx from 'clsx'
 
+import Select from '@/components/ui/Select'
 type Member = {
   id: string; full_name: string; email: string
   role: string; is_active: boolean; last_login_at: string | null; created_at: string
@@ -97,11 +98,8 @@ export default function TeamSettings() {
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <input className={inputCls} placeholder="Full name" value={inviteName} onChange={e => setInviteName(e.target.value)} />
             <input className={inputCls} placeholder="Email address" type="email" value={inviteEmail} onChange={e => setInviteEmail(e.target.value)} />
-            <select className={inputCls} value={inviteRole} onChange={e => setInviteRole(e.target.value)}>
-              {ROLES.filter(r => r !== 'super_admin').map(r => (
-                <option key={r} value={r} className="capitalize">{r.replace('_', ' ')}</option>
-              ))}
-            </select>
+            <Select value={inviteRole} onValueChange={v => setInviteRole(v)}
+              options={ROLES.filter(r => r !== 'super_admin').map(r => ({ value: r, label: r.replace('_', ' ') }))} />
           </div>
           <div className="flex gap-2">
             <button onClick={sendInvite} disabled={inviting}
@@ -143,17 +141,8 @@ export default function TeamSettings() {
                     </div>
                   </td>
                   <td className="px-5 py-3.5">
-                    <select
-                      value={m.role}
-                      disabled={updating === m.id}
-                      onChange={e => updateMember(m.id, { role: e.target.value })}
-                      className={clsx(
-                        'text-xs font-bold px-2.5 py-1 rounded-full border-0 cursor-pointer focus:outline-none capitalize',
-                        ROLE_COLORS[m.role] ?? 'text-slate-400 bg-white/5'
-                      )}
-                    >
-                      {ROLES.map(r => <option key={r} value={r} className="bg-[#0D1B2E] text-white capitalize">{r.replace('_', ' ')}</option>)}
-                    </select>
+                    <Select value={m.role} onValueChange={v => updateMember(m.id, { role: v })} disabled={updating === m.id}
+              options={ROLES.map(r => ({ value: r, label: r.replace('_', ' ') }))} />
                   </td>
                   <td className="px-5 py-3.5 hidden md:table-cell">
                     <span className="text-slate-400 text-xs">{fmtDate(m.last_login_at)}</span>

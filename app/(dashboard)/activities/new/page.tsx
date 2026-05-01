@@ -6,6 +6,7 @@ import PageHeader from '@/components/PageHeader'
 import toast from 'react-hot-toast'
 import { Loader2 } from 'lucide-react'
 
+import Select from '@/components/ui/Select'
 export default function NewActivityPage() {
   const router = useRouter()
   const [loading, setLoading] = useState(false)
@@ -89,13 +90,8 @@ export default function NewActivityPage() {
           </div>
           <div>
             <label className={labelCls}>Related To</label>
-            <select className={inputCls} value={form.related_to_type} onChange={e => update('related_to_type', e.target.value)}>
-              <option value="">Not linked</option>
-              <option value="lead">Lead</option>
-              <option value="contact">Contact</option>
-              <option value="account">Account</option>
-              <option value="deal">Deal</option>
-            </select>
+            <Select value={form.related_to_type} onValueChange={v => update('related_to_type', v)} placeholder="Not linked" allowClear clearLabel="Not linked"
+              options={[{ value: 'lead', label: "Lead" }, { value: 'contact', label: "Contact" }, { value: 'account', label: "Account" }, { value: 'deal', label: "Deal" }]} />
           </div>
           {form.related_to_type && (
             <div>

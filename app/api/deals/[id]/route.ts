@@ -25,6 +25,12 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
   return NextResponse.json({ data })
 }
 
+const DEAL_ALLOWED = [
+  'title', 'account_id', 'contact_id', 'stage_id', 'deal_value', 'currency',
+  'probability', 'expected_close', 'actual_close', 'deal_status', 'lost_reason',
+  'assigned_to', 'notes', 'tags', 'custom_fields',
+]
+
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { session, error } = await requireSession()
   if (error) return error
@@ -32,6 +38,9 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   const { orgId, id: actorId } = session!.user
   const { id } = await params
   const body = await req.json()
+
+  const updates = Object.fromEntries(Object.entries(body).filter(([k]) => DEAL_ALLOWED.includes(k)))
+  if (!Object.keys(updates).length) return NextResponse.json({ error: 'No valid fields to update.' }, { status: 400 })
 
   // Fetch current deal to detect status transition
   const { data: current } = await supabaseAdmin
@@ -41,14 +50,15 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 
   const { data, error: dbError } = await supabaseAdmin
     .from('crm_deals')
-    .update({ ...body, updated_at: new Date().toISOString() })
+    .update({ ...updates, updated_at: new Date().toISOString() })
     .eq('id', id).eq('org_id', orgId)
     .select('id').single()
 
-  if (dbError || !data) return NextResponse.json({ error: 'Deal not found.' }, { status: 404 })
+  if (dbError) return NextResponse.json({ error: dbError.message }, { status: 500 })
+  if (!data) return NextResponse.json({ error: 'Deal not found.' }, { status: 404 })
 
   // Emit ecosystem event when deal is won
-  if (body.deal_status === 'won' && current?.deal_status !== 'won') {
+  if (updates.deal_status === 'won' && current?.deal_status !== 'won') {
     emitEvent({
       event_type: 'deal.won',
       source: 'icrm',
@@ -68,7 +78,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       .eq('id', id).eq('org_id', orgId)
   }
 
-  logAudit({ org_id: orgId, actor_id: actorId, action: 'deal.updated', resource_type: 'crm_deal', resource_id: id, meta: body })
+  logAudit({ org_id: orgId, actor_id: actorId, action: 'deal.updated', resource_type: 'crm_deal', resource_id: id, meta: updates })
   return NextResponse.json({ data })
 }
 

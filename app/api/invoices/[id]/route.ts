@@ -26,10 +26,12 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   const { id } = await params
   const body = await req.json()
 
-  const updates: Record<string, unknown> = { ...body, updated_at: new Date().toISOString() }
+  const ALLOWED = ['quotation_id', 'account_id', 'contact_id', 'status', 'issue_date', 'due_date', 'paid_date', 'items', 'subtotal', 'discount_pct', 'tax_pct', 'total', 'paid_amount', 'currency', 'notes', 'terms']
+  const updates: Record<string, unknown> = Object.fromEntries(Object.entries(body).filter(([k]) => ALLOWED.includes(k)))
+  if (!Object.keys(updates).length) return NextResponse.json({ error: 'No valid fields to update.' }, { status: 400 })
+  updates.updated_at = new Date().toISOString()
   if (body.status === 'paid' && !body.paid_date) {
     updates.paid_date = new Date().toISOString().split('T')[0]
-    updates.paid_amount = body.paid_amount
   }
 
   const { data, error: dbError } = await supabaseAdmin
@@ -38,7 +40,8 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     .eq('id', id).eq('org_id', orgId)
     .select('id').single()
 
-  if (dbError || !data) return NextResponse.json({ error: 'Invoice not found.' }, { status: 404 })
+  if (dbError) return NextResponse.json({ error: dbError.message }, { status: 500 })
+  if (!data) return NextResponse.json({ error: 'Invoice not found.' }, { status: 404 })
 
   // Send invoice email when status changes to 'sent'
   if (body.status === 'sent') {

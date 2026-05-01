@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import PageHeader from '@/components/PageHeader'
+import Select from '@/components/ui/Select'
 import toast from 'react-hot-toast'
 import { Loader2 } from 'lucide-react'
 
@@ -82,16 +83,15 @@ export default function NewDealPage() {
           </div>
           <div>
             <label className={labelCls}>Pipeline Stage</label>
-            <select className={inputCls} value={form.stage_id} onChange={e => update('stage_id', e.target.value)}>
-              {stages.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
-            </select>
+            <Select value={form.stage_id} onValueChange={v => update('stage_id', v)}
+              placeholder="Select stage"
+              options={stages.map(s => ({ value: s.id, label: s.name }))} />
           </div>
           <div>
             <label className={labelCls}>Account</label>
-            <select className={inputCls} value={form.account_id} onChange={e => update('account_id', e.target.value)}>
-              <option value="">No account</option>
-              {accounts.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
-            </select>
+            <Select value={form.account_id} onValueChange={v => update('account_id', v)}
+              placeholder="Select account" allowClear clearLabel="No account"
+              options={accounts.map(a => ({ value: a.id, label: a.name }))} />
           </div>
           <div>
             <label className={labelCls}>Expected Close Date</label>
@@ -99,9 +99,8 @@ export default function NewDealPage() {
           </div>
           <div>
             <label className={labelCls}>Currency</label>
-            <select className={inputCls} value={form.currency} onChange={e => update('currency', e.target.value)}>
-              {['INR','USD','EUR','GBP','AED'].map(c => <option key={c} value={c}>{c}</option>)}
-            </select>
+            <Select value={form.currency} onValueChange={v => update('currency', v)}
+              options={['INR','USD','EUR','GBP','AED'].map(c => ({ value: c, label: c }))} />
           </div>
         </div>
         <div className="flex gap-3 pt-2">

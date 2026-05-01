@@ -25,6 +25,12 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
   return NextResponse.json({ data })
 }
 
+const LEAD_ALLOWED = [
+  'first_name', 'last_name', 'email', 'phone', 'company', 'job_title',
+  'lead_source', 'lead_status', 'rating', 'ai_score', 'assigned_to',
+  'notes', 'tags', 'custom_fields',
+]
+
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { session, error } = await requireSession()
   if (error) return error
@@ -33,17 +39,21 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   const { id } = await params
   const body = await req.json()
 
+  const updates = Object.fromEntries(Object.entries(body).filter(([k]) => LEAD_ALLOWED.includes(k)))
+  if (!Object.keys(updates).length) return NextResponse.json({ error: 'No valid fields to update.' }, { status: 400 })
+
   const { data, error: dbError } = await supabaseAdmin
     .from('crm_leads')
-    .update({ ...body, updated_at: new Date().toISOString() })
+    .update({ ...updates, updated_at: new Date().toISOString() })
     .eq('id', id)
     .eq('org_id', orgId)
     .select('id')
     .single()
 
-  if (dbError || !data) return NextResponse.json({ error: 'Lead not found or update failed.' }, { status: 404 })
+  if (dbError) return NextResponse.json({ error: dbError.message }, { status: 500 })
+  if (!data) return NextResponse.json({ error: 'Lead not found.' }, { status: 404 })
 
-  logAudit({ org_id: orgId, actor_id: actorId, action: 'lead.updated', resource_type: 'crm_lead', resource_id: id, meta: body })
+  logAudit({ org_id: orgId, actor_id: actorId, action: 'lead.updated', resource_type: 'crm_lead', resource_id: id, meta: updates })
 
   return NextResponse.json({ data })
 }

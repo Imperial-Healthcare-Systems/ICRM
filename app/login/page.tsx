@@ -89,12 +89,10 @@ function LoginForm() {
       <div className="w-full max-w-md">
         {/* Logo */}
         <div className="flex items-center justify-center gap-3 mb-8">
-          <div className="w-10 h-10 rounded-xl bg-[#F47920] flex items-center justify-center font-black text-white text-base">
-            IC
-          </div>
+          <img src="/iti_logo.png" alt="Imperial CRM" width={58} height={58} className="rounded-xl shrink-0 -mt-1" />
           <div>
-            <p className="text-white font-bold text-lg leading-none">Imperial CRM</p>
-            <p className="text-slate-400 text-xs">Imperial Tech Innovations</p>
+            <p className="text-white font-bold text-lg leading-none">Imperial CRM<sup className="text-[10px] font-semibold text-slate-400 ml-0.5 align-super">™</sup></p>
+            <p className="text-slate-400 text-xs mt-1">Imperial Tech Innovations</p>
           </div>
         </div>
 

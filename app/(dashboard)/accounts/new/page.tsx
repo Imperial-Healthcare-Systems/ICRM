@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import PageHeader from '@/components/PageHeader'
+import Select from '@/components/ui/Select'
 import toast from 'react-hot-toast'
 import { Loader2 } from 'lucide-react'
 
@@ -64,11 +65,8 @@ export default function NewAccountPage() {
           </div>
           <div>
             <label className={labelCls}>Account Type</label>
-            <select className={inputCls} value={form.account_type} onChange={e => update('account_type', e.target.value)}>
-              {['prospect','customer','partner','vendor','other'].map(t => (
-                <option key={t} value={t} className="capitalize">{t.charAt(0).toUpperCase() + t.slice(1)}</option>
-              ))}
-            </select>
+            <Select value={form.account_type} onValueChange={v => update('account_type', v)}
+              options={['prospect','customer','partner','vendor','other'].map(t => ({ value: t, label: t.charAt(0).toUpperCase() + t.slice(1) }))} />
           </div>
           <div>
             <label className={labelCls}>Phone</label>

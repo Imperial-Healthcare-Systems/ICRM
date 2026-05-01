@@ -17,12 +17,13 @@ type Invoice = {
 }
 
 const STATUS_COLORS: Record<string, string> = {
-  draft:    'bg-slate-500/20 text-slate-400',
-  sent:     'bg-blue-500/20 text-blue-400',
-  paid:     'bg-emerald-500/20 text-emerald-400',
-  overdue:  'bg-red-500/20 text-red-400',
-  cancelled:'bg-orange-500/20 text-orange-400',
-  void:     'bg-gray-500/20 text-gray-400',
+  draft:          'bg-slate-500/20 text-slate-400',
+  sent:           'bg-blue-500/20 text-blue-400',
+  partially_paid: 'bg-yellow-500/20 text-yellow-400',
+  paid:           'bg-emerald-500/20 text-emerald-400',
+  overdue:        'bg-red-500/20 text-red-400',
+  cancelled:      'bg-orange-500/20 text-orange-400',
+  void:           'bg-gray-500/20 text-gray-400',
 }
 
 export default function InvoicesPage() {
@@ -50,16 +51,6 @@ export default function InvoicesPage() {
   useEffect(() => { setPage(1) }, [status])
   useEffect(() => { fetchInvoices() }, [fetchInvoices])
 
-  async function markPaid(id: string, total: number) {
-    const res = await fetch(`/api/invoices/${id}`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ status: 'paid', paid_amount: total }),
-    })
-    if (res.ok) { toast.success('Marked as paid!'); fetchInvoices() }
-    else toast.error('Failed to update.')
-  }
-
   const fmt = (n: number, currency = 'INR') =>
     new Intl.NumberFormat('en-IN', { style: 'currency', currency, maximumFractionDigits: 0 }).format(n)
 
@@ -81,11 +72,11 @@ export default function InvoicesPage() {
       />
 
       <div className="flex gap-2 mb-4 flex-wrap">
-        {['', 'draft', 'sent', 'paid', 'overdue', 'cancelled'].map(s => (
+        {['', 'draft', 'sent', 'partially_paid', 'paid', 'overdue', 'cancelled'].map(s => (
           <button key={s} onClick={() => setStatus(s)}
             className={clsx('px-3 py-1.5 rounded-lg text-xs font-semibold transition capitalize',
               status === s ? 'bg-[#F47920]/20 text-[#F47920] border border-[#F47920]/40' : 'bg-white/5 text-slate-400 hover:bg-white/10')}>
-            {s === '' ? 'All' : s}
+            {s === '' ? 'All' : s.replace('_', ' ')}
           </button>
         ))}
       </div>
@@ -122,7 +113,7 @@ export default function InvoicesPage() {
                 </td>
                 <td className="px-4 py-3 hidden lg:table-cell">
                   <span className={`text-xs font-semibold px-2 py-0.5 rounded-full capitalize ${STATUS_COLORS[inv.status] ?? ''}`}>
-                    {isOverdue(inv) ? 'overdue' : inv.status}
+                    {(isOverdue(inv) ? 'overdue' : inv.status).replace('_', ' ')}
                   </span>
                 </td>
                 <td className={clsx('px-4 py-3 text-xs hidden lg:table-cell', isOverdue(inv) ? 'text-red-400 font-semibold' : 'text-slate-400')}>
@@ -136,12 +127,10 @@ export default function InvoicesPage() {
                 </td>
                 <td className="px-4 py-3">
                   {!['paid','cancelled','void'].includes(inv.status) && (
-                    <button
-                      onClick={() => markPaid(inv.id, inv.total)}
-                      className="flex items-center gap-1 text-slate-500 hover:text-emerald-400 text-xs font-medium transition"
-                    >
-                      <CheckCircle2 className="w-3.5 h-3.5" /> Paid
-                    </button>
+                    <Link href={`/invoices/${inv.id}`}
+                      className="flex items-center gap-1 text-slate-500 hover:text-emerald-400 text-xs font-medium transition">
+                      <CheckCircle2 className="w-3.5 h-3.5" /> Pay
+                    </Link>
                   )}
                 </td>
               </tr>

@@ -6,6 +6,7 @@ import PageHeader from '@/components/PageHeader'
 import toast from 'react-hot-toast'
 import { Loader2 } from 'lucide-react'
 
+import Select from '@/components/ui/Select'
 type Account = { id: string; name: string }
 type Contact = { id: string; first_name: string; last_name: string }
 type User    = { id: string; full_name: string }
@@ -80,32 +81,23 @@ export default function NewFieldVisitPage() {
             </div>
             <div>
               <label className={labelCls}>Account</label>
-              <select className={inputCls} value={form.account_id} onChange={e => update('account_id', e.target.value)}>
-                <option value="">Select account</option>
-                {accounts.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
-              </select>
+              <Select value={form.account_id} onValueChange={v => update('account_id', v)} placeholder="Select account" allowClear clearLabel="Select account"
+              options={accounts.map(a => ({ value: a.id, label: a.name }))} />
             </div>
             <div>
               <label className={labelCls}>Contact</label>
-              <select className={inputCls} value={form.contact_id} onChange={e => update('contact_id', e.target.value)}>
-                <option value="">Select contact</option>
-                {contacts.map(c => <option key={c.id} value={c.id}>{c.first_name} {c.last_name ?? ''}</option>)}
-              </select>
+              <Select value={form.contact_id} onValueChange={v => update('contact_id', v)} placeholder="Select contact" allowClear clearLabel="Select contact"
+              options={contacts.map(c => ({ value: c.id, label: `${c.first_name} ${c.last_name ?? ''}` }))} />
             </div>
             <div>
               <label className={labelCls}>Assign To</label>
-              <select className={inputCls} value={form.assigned_to} onChange={e => update('assigned_to', e.target.value)}>
-                <option value="">Unassigned</option>
-                {users.map(u => <option key={u.id} value={u.id}>{u.full_name}</option>)}
-              </select>
+              <Select value={form.assigned_to} onValueChange={v => update('assigned_to', v)} placeholder="Unassigned" allowClear clearLabel="Unassigned"
+              options={users.map(u => ({ value: u.id, label: u.full_name }))} />
             </div>
             <div>
               <label className={labelCls}>Status</label>
-              <select className={inputCls} value={form.status} onChange={e => update('status', e.target.value)}>
-                {['scheduled','in_progress','completed','cancelled'].map(s => (
-                  <option key={s} value={s} className="capitalize">{s.replace('_', ' ')}</option>
-                ))}
-              </select>
+              <Select value={form.status} onValueChange={v => update('status', v)}
+              options={['scheduled','in_progress','completed','cancelled'].map(s => ({ value: s, label: s.replace('_', ' ') }))} />
             </div>
             <div>
               <label className={labelCls}>Scheduled Date & Time</label>

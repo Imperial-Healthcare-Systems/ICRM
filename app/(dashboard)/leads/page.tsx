@@ -2,12 +2,13 @@
 
 import { useEffect, useState, useCallback } from 'react'
 import Link from 'next/link'
-import { Star, Plus, Search, Brain, Flame, Thermometer, Snowflake, ChevronLeft, ChevronRight, UserCheck } from 'lucide-react'
+import { Star, Plus, Search, Brain, Flame, Thermometer, Snowflake, ChevronLeft, ChevronRight, UserCheck, Upload } from 'lucide-react'
 import PageHeader from '@/components/PageHeader'
 import EmptyState from '@/components/EmptyState'
 import clsx from 'clsx'
 import toast from 'react-hot-toast'
 
+import Select from '@/components/ui/Select'
 type Lead = {
   id: string; first_name: string; last_name: string; email: string
   phone: string; company: string; job_title: string; lead_status: string
@@ -139,12 +140,20 @@ export default function LeadsPage() {
         title="Leads"
         subtitle={`${count} total`}
         actions={
-          <Link
-            href="/leads/new"
-            className="flex items-center gap-1.5 bg-[#F47920] hover:bg-[#e06810] text-white text-sm font-semibold px-4 py-2 rounded-lg transition"
-          >
-            <Plus className="w-4 h-4" /> New Lead
-          </Link>
+          <div className="flex gap-2">
+            <Link
+              href="/leads/bulk"
+              className="flex items-center gap-1.5 bg-white/5 hover:bg-white/10 text-slate-300 hover:text-white text-sm font-medium px-4 py-2 rounded-lg transition border border-white/10"
+            >
+              <Upload className="w-4 h-4" /> Bulk Upload
+            </Link>
+            <Link
+              href="/leads/new"
+              className="flex items-center gap-1.5 bg-[#F47920] hover:bg-[#e06810] text-white text-sm font-semibold px-4 py-2 rounded-lg transition"
+            >
+              <Plus className="w-4 h-4" /> New Lead
+            </Link>
+          </div>
         }
       />
 
@@ -160,13 +169,8 @@ export default function LeadsPage() {
             className="w-full bg-[#0D1B2E] border border-white/10 rounded-lg pl-9 pr-4 py-2 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-[#F47920]/60 transition"
           />
         </div>
-        <select
-          value={status}
-          onChange={e => setStatus(e.target.value)}
-          className="bg-[#0D1B2E] border border-white/10 rounded-lg px-3 py-2 text-sm text-slate-300 focus:outline-none focus:border-[#F47920]/60 transition"
-        >
-          {STATUS_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-        </select>
+        <Select value={status} onValueChange={v => setStatus(v)}
+              options={STATUS_OPTIONS.map(o => ({ value: o.value, label: o.label }))} />
       </div>
 
       {/* Table */}

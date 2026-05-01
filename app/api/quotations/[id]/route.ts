@@ -25,14 +25,19 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   const { id } = await params
   const body = await req.json()
 
+  const ALLOWED = ['deal_id', 'account_id', 'contact_id', 'status', 'valid_until', 'items', 'subtotal', 'discount_pct', 'tax_pct', 'total', 'currency', 'notes', 'terms']
+  const updates = Object.fromEntries(Object.entries(body).filter(([k]) => ALLOWED.includes(k)))
+  if (!Object.keys(updates).length) return NextResponse.json({ error: 'No valid fields to update.' }, { status: 400 })
+
   const { data, error: dbError } = await supabaseAdmin
     .from('crm_quotations')
-    .update({ ...body, updated_at: new Date().toISOString() })
+    .update({ ...updates, updated_at: new Date().toISOString() })
     .eq('id', id).eq('org_id', orgId)
     .select('id').single()
 
-  if (dbError || !data) return NextResponse.json({ error: 'Quotation not found.' }, { status: 404 })
-  logAudit({ org_id: orgId, actor_id: actorId, action: 'quotation.updated', resource_type: 'crm_quotation', resource_id: id })
+  if (dbError) return NextResponse.json({ error: dbError.message }, { status: 500 })
+  if (!data) return NextResponse.json({ error: 'Quotation not found.' }, { status: 404 })
+  logAudit({ org_id: orgId, actor_id: actorId, action: 'quotation.updated', resource_type: 'crm_quotation', resource_id: id, meta: updates })
   return NextResponse.json({ data })
 }
 

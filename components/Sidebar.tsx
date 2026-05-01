@@ -97,14 +97,8 @@ export default function Sidebar({ userName, orgName, planTier }: SidebarProps) {
   return (
     <aside className="fixed inset-y-0 left-0 w-60 bg-[#07111F] border-r border-white/5 flex flex-col z-40">
       {/* Logo */}
-      <div className="flex items-center gap-2.5 px-4 h-14 border-b border-white/5 shrink-0">
-        <div className="w-8 h-8 rounded-lg bg-[#F47920] flex items-center justify-center font-black text-white text-sm">
-          IC
-        </div>
-        <div className="min-w-0">
-          <p className="text-white font-bold text-sm leading-none truncate">Imperial CRM</p>
-          <p className="text-slate-500 text-[10px] truncate">{orgName}</p>
-        </div>
+      <div className="px-2 h-14 border-b border-white/5 shrink-0 flex items-center justify-center">
+        <img src="/iti_logo_2.png" alt="Imperial CRM — Imperial Tech Innovations" className="w-full h-auto max-h-12 object-contain" />
       </div>
 
       {/* Plan badge */}

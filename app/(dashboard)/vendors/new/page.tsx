@@ -6,6 +6,7 @@ import PageHeader from '@/components/PageHeader'
 import toast from 'react-hot-toast'
 import { Loader2 } from 'lucide-react'
 
+import Select from '@/components/ui/Select'
 export default function NewVendorPage() {
   const router = useRouter()
   const [loading, setLoading] = useState(false)
@@ -72,20 +73,13 @@ export default function NewVendorPage() {
             </div>
             <div>
               <label className={labelCls}>Category</label>
-              <select className={inputCls} value={form.category} onChange={e => update('category', e.target.value)}>
-                <option value="">Select category</option>
-                {['technology','logistics','marketing','manufacturing','consulting','raw_materials','office_supplies','other'].map(c => (
-                  <option key={c} value={c} className="capitalize">{c.replace('_', ' ')}</option>
-                ))}
-              </select>
+              <Select value={form.category} onValueChange={v => update('category', v)} placeholder="Select category" allowClear clearLabel="Select category"
+              options={['technology','logistics','marketing','manufacturing','consulting','raw_materials','office_supplies','other'].map(c => ({ value: c, label: c.replace('_', ' ') }))} />
             </div>
             <div>
               <label className={labelCls}>Status</label>
-              <select className={inputCls} value={form.status} onChange={e => update('status', e.target.value)}>
-                <option value="active">Active</option>
-                <option value="inactive">Inactive</option>
-                <option value="blacklisted">Blacklisted</option>
-              </select>
+              <Select value={form.status} onValueChange={v => update('status', v)}
+              options={[{ value: 'active', label: "Active" }, { value: 'inactive', label: "Inactive" }, { value: 'blacklisted', label: "Blacklisted" }]} />
             </div>
           </div>
         </div>
