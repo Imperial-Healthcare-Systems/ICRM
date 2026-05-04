@@ -149,8 +149,8 @@ export default function BillingPage() {
   }
 
   return (
-    <div className="p-6 space-y-6 max-w-5xl">
-      <PageHeader title="Billing & Credits" subtitle="Manage your Imperial Intelligence AI credits" />
+    <div className="p-6 mx-auto space-y-6 max-w-5xl">
+      <PageHeader kicker="Account" title="Billing & Credits" subtitle="Manage your Imperial Intelligence AI credits" />
 
       {/* Balance card */}
       <div className="bg-gradient-to-r from-[#0D1B2E] to-[#0f2744] border border-[#F47920]/20 rounded-2xl p-6 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">

@@ -2,9 +2,11 @@
 
 import { useEffect, useState, useCallback, useRef } from 'react'
 import Link from 'next/link'
-import { TrendingUp, Plus, LayoutGrid, List, IndianRupee } from 'lucide-react'
+import { TrendingUp, Plus, LayoutGrid, List } from 'lucide-react'
 import PageHeader from '@/components/PageHeader'
 import EmptyState from '@/components/EmptyState'
+import Button from '@/components/ui/Button'
+import Skeleton from '@/components/ui/Skeleton'
 import toast from 'react-hot-toast'
 import clsx from 'clsx'
 
@@ -139,31 +141,32 @@ export default function DealsPage() {
   const totalPipeline = deals.reduce((s, d) => s + Number(d.deal_value), 0)
 
   return (
-    <div className="p-6 flex flex-col h-full">
+    <div className="p-6 flex flex-col h-full mx-auto max-w-[1600px] w-full">
       <PageHeader
+        kicker="Sales"
         title="Deals"
         subtitle={`${deals.length} open · ${fmtValue(totalPipeline)} pipeline`}
         actions={
-          <div className="flex items-center gap-2">
-            <div className="flex bg-white/5 rounded-lg p-0.5">
-              <button onClick={() => setView('kanban')} className={clsx('p-1.5 rounded-md transition', view === 'kanban' ? 'bg-white/10 text-white' : 'text-slate-500 hover:text-slate-300')}>
+          <>
+            <div className="flex bg-white/[0.04] rounded-lg p-0.5 border border-white/[0.06]">
+              <button onClick={() => setView('kanban')} title="Kanban view"
+                className={clsx('p-1.5 rounded-md transition', view === 'kanban' ? 'bg-white/[0.08] text-white' : 'text-slate-500 hover:text-slate-300')}>
                 <LayoutGrid className="w-4 h-4" />
               </button>
-              <button onClick={() => setView('list')} className={clsx('p-1.5 rounded-md transition', view === 'list' ? 'bg-white/10 text-white' : 'text-slate-500 hover:text-slate-300')}>
+              <button onClick={() => setView('list')} title="List view"
+                className={clsx('p-1.5 rounded-md transition', view === 'list' ? 'bg-white/[0.08] text-white' : 'text-slate-500 hover:text-slate-300')}>
                 <List className="w-4 h-4" />
               </button>
             </div>
-            <Link href="/deals/new" className="flex items-center gap-1.5 bg-[#F47920] hover:bg-[#e06810] text-white text-sm font-semibold px-4 py-2 rounded-lg transition">
-              <Plus className="w-4 h-4" /> New Deal
-            </Link>
-          </div>
+            <Button href="/deals/new" icon={<Plus className="w-4 h-4" />}>New Deal</Button>
+          </>
         }
       />
 
       {loading ? (
         <div className="flex gap-4 overflow-x-auto pb-4">
           {Array.from({ length: 5 }).map((_, i) => (
-            <div key={i} className="min-w-[220px] h-64 bg-[#0D1B2E] border border-white/5 rounded-xl animate-pulse" />
+            <Skeleton key={i} className="min-w-[220px] h-64 rounded-xl" />
           ))}
         </div>
       ) : deals.length === 0 && stages.length === 0 ? (

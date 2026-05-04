@@ -143,22 +143,24 @@ export default function IntelligencePage() {
   ]
 
   return (
-    <div className="p-6 max-w-3xl">
-      <div className="flex items-start justify-between mb-6">
-        <div>
-          <div className="flex items-center gap-2 mb-1">
-            <Brain className="w-5 h-5 text-[#F47920]" />
-            <h1 className="text-white font-bold text-xl">Imperial Intelligence</h1>
+    <div className="p-6 mx-auto max-w-3xl">
+      <div className="flex items-start justify-between mb-6 gap-4">
+        <div className="min-w-0">
+          <p className="text-kicker text-[#F47920] mb-1.5">AI Suite</p>
+          <div className="flex items-center gap-2">
+            <Brain className="w-6 h-6 text-[#F47920]" />
+            <h1 className="text-title-1 text-white">Imperial Intelligence</h1>
           </div>
-          <p className="text-slate-400 text-sm">AI-powered insights and automation for your sales team.</p>
+          <p className="text-slate-400 text-sm mt-1.5">AI-powered insights and automation for your sales team.</p>
         </div>
         {credits !== null && (
-          <div className="bg-[#F47920]/10 border border-[#F47920]/20 rounded-xl px-4 py-2 text-right">
-            <p className="text-[#F47920] font-bold text-lg">{credits}</p>
-            <p className="text-slate-500 text-xs">AI credits</p>
+          <div className="bg-[#F47920]/10 border border-[#F47920]/20 rounded-xl px-4 py-2.5 text-right shrink-0">
+            <p className="text-[#F47920] font-bold text-xl tabular-nums leading-none">{credits.toLocaleString('en-IN')}</p>
+            <p className="text-kicker text-slate-500 mt-1">AI credits</p>
           </div>
         )}
       </div>
+      <div className="hairline mb-5" />
 
       {/* Tabs */}
       <div className="flex gap-2 mb-6">
@@ -179,7 +181,7 @@ export default function IntelligencePage() {
 
       {/* Summarize panel */}
       {activeTab === 'summarize' && (
-        <div className="bg-[#0D1B2E] border border-white/5 rounded-xl p-6 space-y-4">
+        <div className="surface-premium p-6 space-y-4">
           <div>
             <label className={labelCls}>Record Type</label>
             <div className="flex gap-2">
@@ -211,7 +213,7 @@ export default function IntelligencePage() {
 
       {/* Email Drafter panel */}
       {activeTab === 'draft-email' && (
-        <div className="bg-[#0D1B2E] border border-white/5 rounded-xl p-6 space-y-4">
+        <div className="surface-premium p-6 space-y-4">
           <div>
             <label className={labelCls}>Email Purpose *</label>
             <input className={inputCls} placeholder="e.g. Follow up after demo call, Proposal follow-up, Re-engagement…"
@@ -249,7 +251,7 @@ export default function IntelligencePage() {
 
       {/* Insights panel */}
       {activeTab === 'insights' && (
-        <div className="bg-[#0D1B2E] border border-white/5 rounded-xl p-6 space-y-4">
+        <div className="surface-premium p-6 space-y-4">
           <div className="bg-white/3 rounded-xl p-4">
             <p className="text-slate-400 text-sm">Imperial Intelligence will analyze your last <span className="text-white font-semibold">30 days</span> of CRM data including deals, leads, invoices, and tickets — then provide strategic recommendations tailored for your sales team.</p>
           </div>

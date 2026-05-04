@@ -5,7 +5,12 @@ import { supabaseAdmin } from '@/lib/supabase'
 import {
   Star, UserCircle, Building2, TrendingUp,
   TicketCheck, CalendarCheck, Brain, AlertTriangle,
+  ArrowRight, Sparkles,
 } from 'lucide-react'
+import Link from 'next/link'
+import StatCard from '@/components/ui/StatCard'
+import StatusPill, { pillToneForStatus } from '@/components/ui/StatusPill'
+import Avatar from '@/components/ui/Avatar'
 
 async function getDashboardStats(orgId: string) {
   const [leads, contacts, accounts, deals, tickets, activities, credits] = await Promise.all([
@@ -48,12 +53,12 @@ function fmt(n: number) {
   return `₹${n.toLocaleString('en-IN')}`
 }
 
-const STATUS_COLORS: Record<string, string> = {
-  open:    'bg-blue-500/20 text-blue-400',
-  won:     'bg-emerald-500/20 text-emerald-400',
-  lost:    'bg-red-500/20 text-red-400',
-  on_hold: 'bg-yellow-500/20 text-yellow-400',
-}
+const QUICK_ADD = [
+  { label: 'New Lead',     href: '/leads/new',      dot: 'bg-[#F47920]' },
+  { label: 'New Contact',  href: '/contacts/new',   dot: 'bg-blue-400' },
+  { label: 'New Deal',     href: '/deals/new',      dot: 'bg-emerald-400' },
+  { label: 'Log Activity', href: '/activities/new', dot: 'bg-purple-400' },
+]
 
 export default async function DashboardPage() {
   const session = await getServerSession(authOptions)
@@ -65,108 +70,129 @@ export default async function DashboardPage() {
     getRecentDeals(orgId),
   ])
 
-  const STAT_CARDS = [
-    { label: 'New Leads',          value: stats.newLeads,              icon: <Star className="w-5 h-5" />,         color: 'text-orange-400', bg: 'bg-orange-500/10' },
-    { label: 'Contacts',           value: stats.contacts,              icon: <UserCircle className="w-5 h-5" />,   color: 'text-blue-400',   bg: 'bg-blue-500/10' },
-    { label: 'Accounts',           value: stats.accounts,              icon: <Building2 className="w-5 h-5" />,    color: 'text-violet-400', bg: 'bg-violet-500/10' },
-    { label: 'Open Pipeline',      value: fmt(stats.openDealsValue),   icon: <TrendingUp className="w-5 h-5" />,   color: 'text-emerald-400',bg: 'bg-emerald-500/10' },
-    { label: 'Open Tickets',       value: stats.openTickets,           icon: <TicketCheck className="w-5 h-5" />,  color: 'text-yellow-400', bg: 'bg-yellow-500/10' },
-    { label: 'Pending Tasks',      value: stats.pendingActivities,     icon: <CalendarCheck className="w-5 h-5" />,color: 'text-pink-400',   bg: 'bg-pink-500/10' },
-  ]
+  const hour = new Date().getHours()
+  const greeting = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening'
+  const firstName = session.user.name?.split(' ')[0] ?? 'there'
 
   return (
-    <div className="p-6">
-      {/* Header */}
-      <div className="mb-6">
-        <h1 className="text-white font-bold text-xl">
-          Good {new Date().getHours() < 12 ? 'morning' : new Date().getHours() < 17 ? 'afternoon' : 'evening'},{' '}
-          {session.user.name?.split(' ')[0] ?? 'there'} 👋
+    <div className="p-6 max-w-7xl mx-auto">
+      {/* Greeting hero */}
+      <div className="mb-7 anim-rise">
+        <p className="text-kicker text-[#F47920] mb-2">{new Date().toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long' })}</p>
+        <h1 className="text-display text-white">
+          {greeting}, <span className="text-[#F47920]">{firstName}</span>.
         </h1>
-        <p className="text-slate-400 text-sm mt-1">Here&apos;s what&apos;s happening across your CRM today.</p>
+        <p className="text-slate-400 text-sm mt-2">Here&apos;s what&apos;s happening across your CRM today.</p>
       </div>
 
-      {/* Stat cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4 mb-6">
-        {STAT_CARDS.map(card => (
-          <div key={card.label} className="bg-[#0D1B2E] border border-white/5 rounded-xl p-4">
-            <div className={`w-9 h-9 rounded-lg ${card.bg} flex items-center justify-center ${card.color} mb-3`}>
-              {card.icon}
-            </div>
-            <p className="text-2xl font-bold text-white">{card.value}</p>
-            <p className="text-slate-400 text-xs mt-0.5">{card.label}</p>
-          </div>
-        ))}
+      {/* Stat grid */}
+      <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-3 mb-6">
+        <StatCard label="New Leads"     value={stats.newLeads}                tone="orange"  icon={<Star className="w-[18px] h-[18px]" />}        href="/leads" />
+        <StatCard label="Contacts"      value={stats.contacts}                tone="blue"    icon={<UserCircle className="w-[18px] h-[18px]" />}  href="/contacts" />
+        <StatCard label="Accounts"      value={stats.accounts}                tone="purple"  icon={<Building2 className="w-[18px] h-[18px]" />}   href="/accounts" />
+        <StatCard label="Open Pipeline" value={fmt(stats.openDealsValue)}     tone="emerald" icon={<TrendingUp className="w-[18px] h-[18px]" />}  href="/deals" />
+        <StatCard label="Open Tickets"  value={stats.openTickets}             tone="yellow"  icon={<TicketCheck className="w-[18px] h-[18px]" />} href="/support" />
+        <StatCard label="Pending Tasks" value={stats.pendingActivities}       tone="pink"    icon={<CalendarCheck className="w-[18px] h-[18px]" />} href="/activities" />
       </div>
 
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
         {/* Recent deals */}
-        <div className="xl:col-span-2 bg-[#0D1B2E] border border-white/5 rounded-xl">
-          <div className="flex items-center justify-between px-5 py-4 border-b border-white/5">
-            <h2 className="text-white font-semibold text-sm">Recent Deals</h2>
-            <a href="/deals" className="text-[#F47920] text-xs hover:underline">View all</a>
+        <div className="xl:col-span-2 surface-premium overflow-hidden">
+          <div className="flex items-center justify-between px-5 py-4">
+            <div>
+              <h2 className="text-headline text-white">Recent Deals</h2>
+              <p className="text-slate-500 text-xs mt-0.5">Latest 5 from your pipeline</p>
+            </div>
+            <Link href="/deals" className="text-[#F47920] text-xs font-semibold hover:underline flex items-center gap-1">
+              View all <ArrowRight className="w-3 h-3" />
+            </Link>
           </div>
-          <div className="divide-y divide-white/5">
-            {recentDeals.length === 0 ? (
-              <p className="text-slate-500 text-sm text-center py-8">No deals yet. <a href="/deals" className="text-[#F47920] hover:underline">Create your first deal →</a></p>
-            ) : recentDeals.map((deal: any) => (
-              <div key={deal.id} className="flex items-center gap-3 px-5 py-3">
-                <div className="flex-1 min-w-0">
-                  <p className="text-white text-sm font-medium truncate">{deal.title}</p>
-                  <p className="text-slate-400 text-xs truncate">
-                    {(deal.crm_accounts as any)?.name ?? 'No account'}{' '}
-                    {deal.expected_close ? `· Closes ${new Date(deal.expected_close).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}` : ''}
-                  </p>
-                </div>
-                <div className="text-right shrink-0">
-                  <p className="text-white text-sm font-semibold">{fmt(Number(deal.deal_value))}</p>
-                  <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${STATUS_COLORS[deal.deal_status] ?? 'bg-slate-500/20 text-slate-400'}`}>
-                    {deal.deal_status.replace('_', ' ').toUpperCase()}
-                  </span>
-                </div>
-              </div>
-            ))}
-          </div>
+          <div className="hairline" />
+          {recentDeals.length === 0 ? (
+            <div className="px-5 py-12 text-center">
+              <p className="text-slate-500 text-sm">No deals yet.</p>
+              <Link href="/deals/new" className="text-[#F47920] text-sm font-semibold hover:underline mt-1 inline-flex items-center gap-1">
+                Create your first deal <ArrowRight className="w-3 h-3" />
+              </Link>
+            </div>
+          ) : (
+            <div className="divide-y divide-white/[0.04]">
+              {recentDeals.map((deal: any) => (
+                <Link
+                  key={deal.id}
+                  href={`/deals/${deal.id}`}
+                  className="flex items-center gap-3 px-5 py-3.5 hover:bg-white/[0.02] transition group"
+                >
+                  <Avatar name={(deal.crm_accounts as any)?.name ?? deal.title} id={deal.id} size="sm" ring={false} />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-white text-sm font-medium truncate group-hover:text-[#F47920] transition">{deal.title}</p>
+                    <p className="text-slate-500 text-xs truncate mt-0.5">
+                      {(deal.crm_accounts as any)?.name ?? 'No account'}
+                      {deal.expected_close && (
+                        <> · <span className="tabular-nums">Closes {new Date(deal.expected_close).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}</span></>
+                      )}
+                    </p>
+                  </div>
+                  <div className="text-right shrink-0">
+                    <p className="text-white text-sm font-bold tabular-nums">{fmt(Number(deal.deal_value))}</p>
+                    <StatusPill tone={pillToneForStatus(deal.deal_status)} size="xs" className="mt-1">
+                      {deal.deal_status.replace('_', ' ')}
+                    </StatusPill>
+                  </div>
+                </Link>
+              ))}
+            </div>
+          )}
         </div>
 
-        {/* Credits + Quick actions */}
+        {/* Right column */}
         <div className="space-y-4">
-          {/* Credits */}
-          <div className="bg-[#0D1B2E] border border-white/5 rounded-xl p-5">
-            <div className="flex items-center gap-2 mb-3">
-              <Brain className="w-4 h-4 text-[#F47920]" />
-              <h2 className="text-white font-semibold text-sm">Imperial Intelligence</h2>
-            </div>
-            <p className="text-3xl font-bold text-white">{stats.credits.toLocaleString()}</p>
-            <p className="text-slate-400 text-xs mt-0.5">AI credits remaining</p>
-            {stats.credits < 20 && (
-              <div className="mt-3 flex items-center gap-1.5 text-yellow-400 text-xs bg-yellow-500/10 rounded-lg px-3 py-2">
-                <AlertTriangle className="w-3.5 h-3.5" />
-                Credits running low
+          {/* AI Credits */}
+          <div className="surface-premium p-5 relative overflow-hidden">
+            <div className="absolute -top-12 -right-12 w-32 h-32 rounded-full bg-[#F47920]/10 blur-3xl pointer-events-none" />
+            <div className="relative">
+              <div className="flex items-center justify-between mb-3">
+                <div className="flex items-center gap-2">
+                  <div className="w-8 h-8 rounded-lg bg-[#F47920]/15 text-[#F47920] flex items-center justify-center">
+                    <Brain className="w-4 h-4" />
+                  </div>
+                  <h2 className="text-headline text-white">Imperial Intelligence</h2>
+                </div>
+                <Sparkles className="w-3.5 h-3.5 text-[#F47920]/60" />
               </div>
-            )}
-            <a href="/settings/billing" className="mt-3 block text-center text-xs text-[#F47920] hover:underline">
-              Top up credits →
-            </a>
+              <p className="text-display text-white tabular-nums leading-none">{stats.credits.toLocaleString('en-IN')}</p>
+              <p className="text-slate-500 text-xs mt-1.5">AI credits remaining</p>
+              {stats.credits < 20 && (
+                <div className="mt-3 flex items-center gap-1.5 text-yellow-400 text-xs bg-yellow-500/10 border border-yellow-500/20 rounded-lg px-3 py-2">
+                  <AlertTriangle className="w-3.5 h-3.5" />
+                  Credits running low
+                </div>
+              )}
+              <Link
+                href="/settings/billing"
+                className="mt-4 flex items-center justify-center gap-1 text-xs font-semibold text-[#F47920] hover:text-[#e06810] py-2 rounded-lg bg-[#F47920]/10 hover:bg-[#F47920]/15 transition"
+              >
+                Top up credits <ArrowRight className="w-3 h-3" />
+              </Link>
+            </div>
           </div>
 
           {/* Quick actions */}
-          <div className="bg-[#0D1B2E] border border-white/5 rounded-xl p-5">
-            <h2 className="text-white font-semibold text-sm mb-3">Quick Add</h2>
-            <div className="space-y-2">
-              {[
-                { label: 'New Lead',     href: '/leads/new' },
-                { label: 'New Contact',  href: '/contacts/new' },
-                { label: 'New Deal',     href: '/deals/new' },
-                { label: 'Log Activity', href: '/activities/new' },
-              ].map(item => (
-                <a
+          <div className="surface-premium p-5">
+            <h2 className="text-headline text-white mb-3">Quick Add</h2>
+            <div className="space-y-1.5">
+              {QUICK_ADD.map(item => (
+                <Link
                   key={item.href}
                   href={item.href}
-                  className="flex items-center justify-between px-3 py-2 rounded-lg bg-white/5 hover:bg-white/8 text-slate-300 hover:text-white text-xs font-medium transition"
+                  className="flex items-center justify-between px-3 py-2.5 rounded-lg bg-white/[0.03] hover:bg-white/[0.06] text-slate-300 hover:text-white text-xs font-medium transition group"
                 >
-                  {item.label}
-                  <span className="text-slate-500">→</span>
-                </a>
+                  <span className="flex items-center gap-2.5">
+                    <span className={`w-1.5 h-1.5 rounded-full ${item.dot}`} />
+                    {item.label}
+                  </span>
+                  <ArrowRight className="w-3.5 h-3.5 text-slate-500 group-hover:text-[#F47920] group-hover:translate-x-0.5 transition" />
+                </Link>
               ))}
             </div>
           </div>

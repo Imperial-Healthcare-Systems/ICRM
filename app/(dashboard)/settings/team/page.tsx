@@ -1,30 +1,30 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { Users, UserPlus, Loader2, Shield, CheckCircle, XCircle } from 'lucide-react'
+import { useSession } from 'next-auth/react'
+import { UserPlus, Loader2, CheckCircle, XCircle, Trash2 } from 'lucide-react'
+import PageHeader from '@/components/PageHeader'
+import Avatar from '@/components/ui/Avatar'
+import Button from '@/components/ui/Button'
+import Skeleton from '@/components/ui/Skeleton'
+import Select from '@/components/ui/Select'
 import toast from 'react-hot-toast'
 import clsx from 'clsx'
-
-import Select from '@/components/ui/Select'
 type Member = {
   id: string; full_name: string; email: string
   role: string; is_active: boolean; last_login_at: string | null; created_at: string
 }
 
 const ROLES = ['super_admin','admin','manager','sales_rep','support_rep','viewer'] as const
-const ROLE_COLORS: Record<string, string> = {
-  super_admin: 'text-[#F47920] bg-[#F47920]/10',
-  admin:       'text-blue-400 bg-blue-400/10',
-  manager:     'text-purple-400 bg-purple-400/10',
-  sales_rep:   'text-emerald-400 bg-emerald-400/10',
-  support_rep: 'text-cyan-400 bg-cyan-400/10',
-  viewer:      'text-slate-400 bg-white/5',
-}
-
 export default function TeamSettings() {
+  const { data: session } = useSession()
+  const currentUserId = session?.user?.id
+  const isSuperAdmin = session?.user?.role === 'super_admin'
+
   const [members, setMembers] = useState<Member[]>([])
   const [loading, setLoading] = useState(true)
   const [updating, setUpdating] = useState<string | null>(null)
+  const [deleting, setDeleting] = useState<string | null>(null)
 
   // Invite form
   const [showInvite, setShowInvite] = useState(false)
@@ -54,13 +54,24 @@ export default function TeamSettings() {
     setUpdating(null)
   }
 
+  async function deleteMember(m: Member) {
+    if (!confirm(`Delete ${m.full_name} (${m.email})? This permanently removes their account. Records they created will remain but become unowned.`)) return
+    setDeleting(m.id)
+    const res = await fetch(`/api/settings/team/${m.id}`, { method: 'DELETE' })
+    const data = await res.json().catch(() => ({}))
+    if (!res.ok) { toast.error(data.error ?? 'Delete failed.'); setDeleting(null); return }
+    setMembers(prev => prev.filter(x => x.id !== m.id))
+    toast.success(`${m.full_name} removed.`)
+    setDeleting(null)
+  }
+
   async function sendInvite() {
     if (!inviteEmail.trim() || !inviteName.trim()) { toast.error('Name and email are required.'); return }
     setInviting(true)
     const res = await fetch('/api/auth/invite', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email: inviteEmail, name: inviteName, role: inviteRole }),
+      body: JSON.stringify({ email: inviteEmail, full_name: inviteName, role: inviteRole }),
     })
     const data = await res.json()
     if (!res.ok) { toast.error(data.error ?? 'Invite failed'); setInviting(false); return }
@@ -73,27 +84,17 @@ export default function TeamSettings() {
   const fmtDate = (s: string | null) => s ? new Date(s).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : 'Never'
 
   return (
-    <div className="p-8 max-w-4xl space-y-6">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <Users className="w-5 h-5 text-[#F47920]" />
-          <div>
-            <h1 className="text-white font-bold text-xl">Team</h1>
-            <p className="text-slate-500 text-sm">Manage members, roles, and access.</p>
-          </div>
-        </div>
-        <button
-          onClick={() => setShowInvite(v => !v)}
-          className="flex items-center gap-2 bg-[#F47920] hover:bg-[#e06810] text-white font-semibold px-4 py-2 rounded-lg text-sm transition"
-        >
-          <UserPlus className="w-4 h-4" />
-          Invite Member
-        </button>
-      </div>
+    <div className="p-8 mx-auto max-w-4xl space-y-6">
+      <PageHeader
+        kicker="Settings"
+        title="Team"
+        subtitle="Manage members, roles, and access"
+        actions={<Button onClick={() => setShowInvite(v => !v)} icon={<UserPlus className="w-4 h-4" />}>Invite Member</Button>}
+      />
 
       {/* Invite form */}
       {showInvite && (
-        <div className="bg-[#0D1B2E] border border-[#F47920]/20 rounded-xl p-5 space-y-3">
+        <div className="surface-premium border-[#F47920]/20 p-5 space-y-3 anim-rise">
           <p className="text-white font-semibold text-sm">Invite a team member</p>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <input className={inputCls} placeholder="Full name" value={inviteName} onChange={e => setInviteName(e.target.value)} />
@@ -113,9 +114,9 @@ export default function TeamSettings() {
       )}
 
       {/* Members table */}
-      <div className="bg-[#0D1B2E] border border-white/5 rounded-xl overflow-hidden">
+      <div className="surface-premium overflow-hidden">
         {loading ? (
-          <div className="h-48 animate-pulse bg-white/3" />
+          <div className="p-4"><Skeleton className="h-48 rounded-xl" /></div>
         ) : (
           <table className="w-full">
             <thead>
@@ -124,6 +125,7 @@ export default function TeamSettings() {
                 <th className="px-5 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wide">Role</th>
                 <th className="px-5 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wide hidden md:table-cell">Last Login</th>
                 <th className="px-5 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wide">Status</th>
+                {isSuperAdmin && <th className="px-5 py-3 w-10" aria-label="Actions" />}
               </tr>
             </thead>
             <tbody>
@@ -131,9 +133,7 @@ export default function TeamSettings() {
                 <tr key={m.id} className="border-b border-white/5 last:border-0">
                   <td className="px-5 py-3.5">
                     <div className="flex items-center gap-3">
-                      <div className="w-8 h-8 rounded-full bg-[#F47920]/20 flex items-center justify-center text-[#F47920] text-xs font-bold shrink-0">
-                        {m.full_name.charAt(0).toUpperCase()}
-                      </div>
+                      <Avatar name={m.full_name} brand size="sm" />
                       <div>
                         <p className="text-white text-sm font-medium">{m.full_name}</p>
                         <p className="text-slate-500 text-xs">{m.email}</p>
@@ -163,6 +163,23 @@ export default function TeamSettings() {
                           : <><XCircle className="w-3.5 h-3.5" />Inactive</>}
                     </button>
                   </td>
+                  {isSuperAdmin && (
+                    <td className="px-5 py-3.5 text-right">
+                      {m.id !== currentUserId && (
+                        <button
+                          onClick={() => deleteMember(m)}
+                          disabled={deleting === m.id}
+                          title="Delete member"
+                          aria-label={`Delete ${m.full_name}`}
+                          className="w-8 h-8 rounded-lg bg-red-500/10 hover:bg-red-500/20 disabled:opacity-50 flex items-center justify-center text-red-400 hover:text-red-300 transition"
+                        >
+                          {deleting === m.id
+                            ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                            : <Trash2 className="w-3.5 h-3.5" />}
+                        </button>
+                      )}
+                    </td>
+                  )}
                 </tr>
               ))}
             </tbody>

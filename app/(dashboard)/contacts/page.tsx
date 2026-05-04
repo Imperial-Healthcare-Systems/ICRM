@@ -5,6 +5,10 @@ import Link from 'next/link'
 import { UserCircle, Plus, Search, ChevronLeft, ChevronRight } from 'lucide-react'
 import PageHeader from '@/components/PageHeader'
 import EmptyState from '@/components/EmptyState'
+import StatusPill from '@/components/ui/StatusPill'
+import Button from '@/components/ui/Button'
+import Skeleton from '@/components/ui/Skeleton'
+import Avatar from '@/components/ui/Avatar'
 
 type Contact = {
   id: string; first_name: string; last_name: string; email: string
@@ -13,9 +17,8 @@ type Contact = {
   crm_accounts: { name: string } | null
 }
 
-const STATUS_COLORS: Record<string, string> = {
-  new: 'bg-blue-500/20 text-blue-400', contacted: 'bg-purple-500/20 text-purple-400',
-  qualified: 'bg-emerald-500/20 text-emerald-400', converted: 'bg-orange-500/20 text-orange-400',
+const STATUS_TONE: Record<string, 'blue' | 'purple' | 'emerald' | 'orange'> = {
+  new: 'blue', contacted: 'purple', qualified: 'emerald', converted: 'orange',
 }
 
 export default function ContactsPage() {
@@ -35,9 +38,7 @@ export default function ContactsPage() {
       const data = await res.json()
       setContacts(data.data ?? [])
       setCount(data.count ?? 0)
-    } finally {
-      setLoading(false)
-    }
+    } finally { setLoading(false) }
   }, [page, search])
 
   useEffect(() => { setPage(1) }, [search])
@@ -46,14 +47,13 @@ export default function ContactsPage() {
   const totalPages = Math.ceil(count / pageSize)
 
   return (
-    <div className="p-6">
+    <div className="p-6 mx-auto max-w-7xl">
       <PageHeader
+        kicker="Sales"
         title="Contacts"
         subtitle={`${count} total`}
         actions={
-          <Link href="/contacts/new" className="flex items-center gap-1.5 bg-[#F47920] hover:bg-[#e06810] text-white text-sm font-semibold px-4 py-2 rounded-lg transition">
-            <Plus className="w-4 h-4" /> New Contact
-          </Link>
+          <Button href="/contacts/new" icon={<Plus className="w-4 h-4" />}>New Contact</Button>
         }
       />
 
@@ -68,7 +68,7 @@ export default function ContactsPage() {
         </div>
       </div>
 
-      <div className="bg-[#0D1B2E] border border-white/5 rounded-xl overflow-hidden">
+      <div className="surface-premium overflow-hidden">
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-white/5 text-slate-500 text-xs uppercase tracking-wide">
@@ -79,28 +79,33 @@ export default function ContactsPage() {
               <th className="text-left px-4 py-3 font-semibold hidden xl:table-cell">Assigned</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-white/5">
+          <tbody className="divide-y divide-white/[0.04]">
             {loading ? Array.from({ length: 8 }).map((_, i) => (
-              <tr key={i}><td colSpan={5} className="px-4 py-3"><div className="h-4 bg-white/5 rounded animate-pulse" /></td></tr>
+              <tr key={i}><td colSpan={5} className="px-4 py-3"><Skeleton variant="text" className="h-3" /></td></tr>
             )) : contacts.length === 0 ? (
               <tr><td colSpan={5}>
-                <EmptyState icon={<UserCircle className="w-7 h-7" />} title="No contacts yet" description="Add contacts to start building relationships." actionLabel="Add Contact" actionHref="/contacts/new" />
+                <EmptyState icon={<UserCircle className="w-7 h-7" />} title="No contacts yet"
+                  description="Add contacts to start building relationships."
+                  actionLabel="Add Contact" actionHref="/contacts/new" />
               </td></tr>
-            ) : contacts.map(c => (
-              <tr key={c.id} className="hover:bg-white/3 transition group">
+            ) : contacts.map((c, idx) => (
+              <tr key={c.id} className="hover:bg-white/[0.02] transition group anim-rise" style={{ animationDelay: `${Math.min(idx * 15, 200)}ms` }}>
                 <td className="px-4 py-3">
-                  <Link href={`/contacts/${c.id}`} className="block">
-                    <p className="text-white font-medium group-hover:text-[#F47920] transition">{c.first_name} {c.last_name ?? ''}</p>
-                    <p className="text-slate-500 text-xs">{c.email ?? c.phone ?? '—'}</p>
+                  <Link href={`/contacts/${c.id}`} className="flex items-center gap-3">
+                    <Avatar name={`${c.first_name} ${c.last_name ?? ''}`} id={c.id} size="sm" />
+                    <div className="min-w-0">
+                      <p className="text-white font-medium group-hover:text-[#F47920] transition truncate">{c.first_name} {c.last_name ?? ''}</p>
+                      <p className="text-slate-500 text-xs truncate">{c.email ?? c.phone ?? '—'}</p>
+                    </div>
                   </Link>
                 </td>
                 <td className="px-4 py-3 text-slate-300 hidden md:table-cell">{c.crm_accounts?.name ?? '—'}</td>
                 <td className="px-4 py-3 text-slate-400 text-xs hidden lg:table-cell">{c.job_title ?? '—'}</td>
                 <td className="px-4 py-3 hidden lg:table-cell">
                   {c.lead_status && (
-                    <span className={`text-xs font-semibold px-2 py-0.5 rounded-full capitalize ${STATUS_COLORS[c.lead_status] ?? 'bg-slate-500/20 text-slate-400'}`}>
+                    <StatusPill tone={STATUS_TONE[c.lead_status] ?? 'slate'} size="sm" uppercase={false} className="capitalize">
                       {c.lead_status}
-                    </span>
+                    </StatusPill>
                   )}
                 </td>
                 <td className="px-4 py-3 text-slate-400 text-xs hidden xl:table-cell">{c.crm_users?.full_name ?? '—'}</td>
@@ -109,8 +114,8 @@ export default function ContactsPage() {
           </tbody>
         </table>
         {totalPages > 1 && (
-          <div className="flex items-center justify-between px-4 py-3 border-t border-white/5">
-            <p className="text-slate-500 text-xs">{count} total · Page {page} of {totalPages}</p>
+          <div className="flex items-center justify-between px-4 py-3 border-t border-white/[0.04]">
+            <p className="text-slate-500 text-xs tabular-nums">{count} total · Page {page} of {totalPages}</p>
             <div className="flex gap-1">
               <button disabled={page === 1} onClick={() => setPage(p => p - 1)} className="w-7 h-7 rounded-lg bg-white/5 hover:bg-white/10 disabled:opacity-40 flex items-center justify-center text-slate-400 transition"><ChevronLeft className="w-3.5 h-3.5" /></button>
               <button disabled={page >= totalPages} onClick={() => setPage(p => p + 1)} className="w-7 h-7 rounded-lg bg-white/5 hover:bg-white/10 disabled:opacity-40 flex items-center justify-center text-slate-400 transition"><ChevronRight className="w-3.5 h-3.5" /></button>

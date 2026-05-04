@@ -5,6 +5,9 @@ import Link from 'next/link'
 import { FileSignature, Plus, ChevronLeft, ChevronRight, RefreshCw } from 'lucide-react'
 import PageHeader from '@/components/PageHeader'
 import EmptyState from '@/components/EmptyState'
+import StatusPill, { pillToneForStatus } from '@/components/ui/StatusPill'
+import Button from '@/components/ui/Button'
+import Skeleton from '@/components/ui/Skeleton'
 import clsx from 'clsx'
 
 type Contract = {
@@ -12,14 +15,6 @@ type Contract = {
   status: string; start_date: string; end_date: string; value: number
   currency: string; auto_renew: boolean; created_at: string
   crm_accounts: { name: string } | null
-}
-
-const STATUS_COLORS: Record<string, string> = {
-  draft:      'bg-slate-500/20 text-slate-400',
-  active:     'bg-emerald-500/20 text-emerald-400',
-  expired:    'bg-red-500/20 text-red-400',
-  terminated: 'bg-orange-500/20 text-orange-400',
-  renewed:    'bg-blue-500/20 text-blue-400',
 }
 
 export default function ContractsPage() {
@@ -58,28 +53,27 @@ export default function ContractsPage() {
   }
 
   return (
-    <div className="p-6">
+    <div className="p-6 mx-auto max-w-7xl">
       <PageHeader
+        kicker="Finance"
         title="Contracts"
         subtitle={`${count} total`}
         actions={
-          <Link href="/contracts/new" className="flex items-center gap-1.5 bg-[#F47920] hover:bg-[#e06810] text-white text-sm font-semibold px-4 py-2 rounded-lg transition">
-            <Plus className="w-4 h-4" /> New Contract
-          </Link>
+          <Button href="/contracts/new" icon={<Plus className="w-4 h-4" />}>New Contract</Button>
         }
       />
 
-      <div className="flex gap-2 mb-4 flex-wrap">
+      <div className="flex gap-1.5 mb-4 flex-wrap">
         {['', 'draft', 'active', 'expired', 'terminated', 'renewed'].map(s => (
           <button key={s} onClick={() => setStatus(s)}
             className={clsx('px-3 py-1.5 rounded-lg text-xs font-semibold transition capitalize',
-              status === s ? 'bg-[#F47920]/20 text-[#F47920] border border-[#F47920]/40' : 'bg-white/5 text-slate-400 hover:bg-white/10')}>
+              status === s ? 'bg-[#F47920]/15 text-[#F47920] ring-1 ring-[#F47920]/40' : 'bg-white/[0.04] text-slate-400 hover:bg-white/[0.08] hover:text-slate-200')}>
             {s === '' ? 'All' : s}
           </button>
         ))}
       </div>
 
-      <div className="bg-[#0D1B2E] border border-white/5 rounded-xl overflow-hidden">
+      <div className="surface-premium overflow-hidden">
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-white/5 text-slate-500 text-xs uppercase tracking-wide">
@@ -90,9 +84,9 @@ export default function ContractsPage() {
               <th className="text-right px-4 py-3 font-semibold hidden xl:table-cell">Value</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-white/5">
+          <tbody className="divide-y divide-white/[0.04]">
             {loading ? Array.from({ length: 6 }).map((_, i) => (
-              <tr key={i}><td colSpan={5} className="px-4 py-3"><div className="h-4 bg-white/5 rounded animate-pulse" /></td></tr>
+              <tr key={i}><td colSpan={5} className="px-4 py-3"><Skeleton variant="text" className="h-3" /></td></tr>
             )) : contracts.length === 0 ? (
               <tr><td colSpan={5}>
                 <EmptyState icon={<FileSignature className="w-7 h-7" />} title="No contracts yet" description="Manage client contracts and track renewals." actionLabel="New Contract" actionHref="/contracts/new" />
@@ -111,8 +105,8 @@ export default function ContractsPage() {
                   <td className="px-4 py-3 text-slate-300 hidden md:table-cell">{c.crm_accounts?.name ?? '—'}</td>
                   <td className="px-4 py-3 hidden lg:table-cell">
                     <div className="flex items-center gap-2">
-                      <span className={`text-xs font-semibold px-2 py-0.5 rounded-full capitalize ${STATUS_COLORS[c.status] ?? ''}`}>{c.status}</span>
-                      {c.auto_renew && <span title="Auto-renews"><RefreshCw className="w-3 h-3 text-blue-400" /></span>}
+                      <StatusPill tone={pillToneForStatus(c.status)} size="sm" uppercase={false} className="capitalize">{c.status}</StatusPill>
+                      {c.auto_renew && <span title="Auto-renews" className="text-blue-400"><RefreshCw className="w-3 h-3" /></span>}
                     </div>
                   </td>
                   <td className="px-4 py-3 hidden lg:table-cell">

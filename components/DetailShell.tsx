@@ -84,20 +84,20 @@ export default function DetailShell<T extends { id: string }>({
 
   if (loading) return (
     <div className="p-6 max-w-5xl">
-      <div className="h-8 w-48 bg-white/5 rounded animate-pulse mb-6" />
+      <div className="h-8 w-48 bg-[var(--surface-sunken)] rounded anim-shimmer mb-6" />
       <div className="grid grid-cols-3 gap-6">
-        <div className="col-span-2 h-96 bg-white/5 rounded-xl animate-pulse" />
-        <div className="h-96 bg-white/5 rounded-xl animate-pulse" />
+        <div className="col-span-2 h-96 bg-[var(--surface-sunken)] rounded-xl anim-shimmer" />
+        <div className="h-96 bg-[var(--surface-sunken)] rounded-xl anim-shimmer" />
       </div>
     </div>
   )
 
   if (notFound || !record) return (
     <div className="p-6 max-w-2xl">
-      <div className="bg-[#0D1B2E] border border-red-500/20 rounded-xl p-8 text-center">
-        <p className="text-white font-semibold mb-2 capitalize">{entityLabel} not found</p>
-        <p className="text-slate-500 text-sm mb-4">It may have been deleted or you don&apos;t have access.</p>
-        <Link href={backHref} className="text-[#F47920] text-sm font-semibold hover:underline">← Back</Link>
+      <div className="bg-[var(--surface)] border border-red-500/20 rounded-xl p-8 text-center shadow-[var(--shadow-sm)]">
+        <p className="text-[var(--text-primary)] font-semibold mb-2 capitalize">{entityLabel} not found</p>
+        <p className="text-[var(--text-muted)] text-sm mb-4">It may have been deleted or you don&apos;t have access.</p>
+        <Link href={backHref} className="text-[var(--accent)] text-sm font-semibold hover:underline">← Back</Link>
       </div>
     </div>
   )
@@ -106,24 +106,24 @@ export default function DetailShell<T extends { id: string }>({
     <div className="p-6 max-w-5xl">
       {/* Header */}
       <div className="flex items-start gap-3 mb-6">
-        <button onClick={() => router.push(backHref)} className="w-9 h-9 rounded-lg bg-white/5 hover:bg-white/10 flex items-center justify-center text-slate-400 hover:text-white transition shrink-0 mt-0.5">
+        <button onClick={() => router.push(backHref)} className="w-9 h-9 rounded-lg bg-[var(--hover-overlay-light)] hover:bg-[var(--hover-overlay-medium)] flex items-center justify-center text-[var(--text-tertiary)] hover:text-[var(--text-primary)] transition shrink-0 mt-0.5">
           <ArrowLeft className="w-4 h-4" />
         </button>
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-3 flex-wrap">
-            <h1 className="text-white font-bold text-xl truncate">{title(record)}</h1>
+            <h1 className="text-[var(--text-primary)] font-bold text-xl truncate">{title(record)}</h1>
             {badges?.(record)}
           </div>
-          {subtitle && <p className="text-slate-500 text-xs mt-0.5">{subtitle(record)}</p>}
+          {subtitle && <p className="text-[var(--text-muted)] text-xs mt-0.5">{subtitle(record)}</p>}
         </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div className="lg:col-span-2 space-y-4">
-          <div className="bg-[#0D1B2E] border border-white/5 rounded-xl p-6">
+          <div className="bg-[var(--surface)] border border-[var(--border-subtle)] rounded-xl p-6 shadow-[var(--shadow-sm)]">
             {children(record, form, update, { saving, reload: load })}
-            <div className="flex gap-3 mt-5 pt-5 border-t border-white/5">
-              <button onClick={save} disabled={saving} className="flex items-center gap-2 bg-[#F47920] hover:bg-[#e06810] disabled:opacity-50 text-white font-semibold px-5 py-2 rounded-lg text-sm transition">
+            <div className="flex gap-3 mt-5 pt-5 border-t border-[var(--border-subtle)]">
+              <button onClick={save} disabled={saving} className="flex items-center gap-2 bg-[var(--accent)] hover:bg-[var(--accent-hover)] disabled:opacity-50 text-white font-semibold px-5 py-2 rounded-lg text-sm transition shadow-[var(--accent-shadow)]">
                 {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
                 {saving ? 'Saving…' : 'Save changes'}
               </button>
@@ -143,6 +143,6 @@ export default function DetailShell<T extends { id: string }>({
   )
 }
 
-// Reusable form classes
-export const inputCls = 'w-full bg-white/5 border border-white/10 rounded-lg px-4 py-2.5 text-white placeholder-slate-500 text-sm focus:outline-none focus:border-[#F47920]/60 focus:ring-1 focus:ring-[#F47920]/20 transition disabled:opacity-50'
-export const labelCls = 'block text-xs font-medium text-slate-400 mb-1.5'
+// Reusable form classes — token-aware
+export const inputCls = 'w-full bg-[var(--surface-sunken)] border border-[var(--border-default)] rounded-lg px-4 py-2.5 text-[var(--text-primary)] placeholder:text-[var(--text-faint)] text-sm focus:outline-none focus:border-[var(--accent)] focus:ring-1 focus:ring-[var(--accent-ring)] transition disabled:opacity-50'
+export const labelCls = 'block text-xs font-medium text-[var(--text-tertiary)] mb-1.5'

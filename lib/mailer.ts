@@ -251,11 +251,11 @@ export async function sendInviteEmail(params: {
   invitedBy: string
   orgName: string
   role: string
-  otp: string
-  expiresInMinutes: number
+  loginUrl?: string
 }) {
-  const { to, name, invitedBy, orgName, role, otp, expiresInMinutes } = params
+  const { to, name, invitedBy, orgName, role, loginUrl = 'https://imperialcrm.cloud/login' } = params
   const { transporter, from } = await createTransporter()
+  const roleLabel = role.replace(/_/g, ' ')
 
   const html = `
   <div style="font-family:'Segoe UI',Arial,sans-serif;background:#f8fafc;padding:24px;">
@@ -264,12 +264,18 @@ export async function sendInviteEmail(params: {
       <div style="padding:28px 32px">
         <p style="font-size:15px;color:#1e293b;margin:0 0 6px">Hello <strong>${name}</strong>,</p>
         <p style="font-size:13px;color:#64748b;margin:0 0 20px;line-height:1.6">
-          <strong>${invitedBy}</strong> has invited you to join <strong>${orgName}</strong> on Imperial CRM as <strong>${role}</strong>.
+          <strong>${invitedBy}</strong> has invited you to join <strong>${orgName}</strong> on Imperial CRM as <strong>${roleLabel}</strong>.
         </p>
-        <p style="font-size:13px;color:#64748b;margin:0 0 12px">Use the OTP below to activate your account (expires in ${expiresInMinutes} minutes):</p>
-        <div style="margin:0 0 20px;padding:20px;border-radius:14px;background:linear-gradient(135deg,#fff7ed 0%,#ffedd5 100%);border:1px solid #fdba74;text-align:center">
-          <div style="font-size:34px;font-weight:800;letter-spacing:12px;color:#c2410c">${otp}</div>
-        </div>
+        <p style="font-size:13px;color:#374151;margin:0 0 16px;line-height:1.6">
+          To activate your account:
+        </p>
+        <ol style="font-size:13px;color:#475569;line-height:1.8;margin:0 0 20px;padding-left:18px">
+          <li>Click <strong>Sign in to Imperial CRM</strong> below.</li>
+          <li>Enter your email <strong style="color:#1e293b">${to}</strong>.</li>
+          <li>Click <strong>Send sign-in code</strong> — we&apos;ll email you a 6-digit OTP.</li>
+          <li>Enter the OTP to access your workspace.</li>
+        </ol>
+        <a href="${loginUrl}" style="display:inline-block;background:#F47920;color:#fff;font-weight:700;font-size:14px;padding:12px 28px;border-radius:8px;text-decoration:none;margin-bottom:20px">Sign in to Imperial CRM</a>
         <p style="font-size:12px;color:#94a3b8;margin:0">If you were not expecting this invitation, please ignore this email.</p>
         ${emailFooter()}
       </div>
@@ -280,6 +286,6 @@ export async function sendInviteEmail(params: {
     from, to,
     subject: `You're invited to ${orgName} on Imperial CRM`,
     html,
-    text: `Hello ${name},\n\n${invitedBy} has invited you to join ${orgName} on Imperial CRM as ${role}.\n\nYour OTP: ${otp}\nExpires in ${expiresInMinutes} minutes.\n\nIf unexpected, ignore this email.`,
+    text: `Hello ${name},\n\n${invitedBy} has invited you to join ${orgName} on Imperial CRM as ${roleLabel}.\n\nTo activate your account:\n  1. Visit ${loginUrl}\n  2. Enter your email: ${to}\n  3. Click "Send sign-in code" — we will email you a 6-digit OTP\n  4. Enter the OTP to access your workspace\n\nIf you were not expecting this invitation, please ignore this email.`,
   })
 }

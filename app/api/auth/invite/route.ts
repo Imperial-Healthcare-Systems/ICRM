@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { supabaseAdmin } from '@/lib/supabase'
-import { createOtpChallenge } from '@/lib/otp'
 import { sendInviteEmail } from '@/lib/mailer'
 import { logAudit } from '@/lib/audit'
 
@@ -73,7 +72,9 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Failed to create user.' }, { status: 500 })
     }
 
-    const { otp, expiresInMinutes } = createOtpChallenge(normalizedEmail)
+    const loginUrl = process.env.NEXT_PUBLIC_APP_URL
+      ? `${process.env.NEXT_PUBLIC_APP_URL.replace(/\/$/, '')}/login`
+      : undefined
 
     await sendInviteEmail({
       to: normalizedEmail,
@@ -81,8 +82,7 @@ export async function POST(req: NextRequest) {
       invitedBy: inviter?.full_name ?? 'Administrator',
       orgName: org?.name ?? 'your organisation',
       role,
-      otp,
-      expiresInMinutes,
+      loginUrl,
     })
 
     logAudit({

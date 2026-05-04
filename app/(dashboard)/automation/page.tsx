@@ -1,10 +1,12 @@
 'use client'
 
 import { useEffect, useState, useCallback } from 'react'
-import Link from 'next/link'
 import { Zap, Plus, Play, Pause, Trash2 } from 'lucide-react'
 import PageHeader from '@/components/PageHeader'
 import EmptyState from '@/components/EmptyState'
+import StatusPill from '@/components/ui/StatusPill'
+import Button from '@/components/ui/Button'
+import Skeleton from '@/components/ui/Skeleton'
 import toast from 'react-hot-toast'
 import clsx from 'clsx'
 
@@ -65,42 +67,42 @@ export default function AutomationPage() {
   const active = rules.filter(r => r.is_active).length
 
   return (
-    <div className="p-6">
+    <div className="p-6 mx-auto max-w-5xl">
       <PageHeader
+        kicker="Workflow"
         title="Automation"
         subtitle={`${rules.length} rules · ${active} active`}
-        actions={
-          <Link href="/automation/new" className="flex items-center gap-1.5 bg-[#F47920] hover:bg-[#e06810] text-white text-sm font-semibold px-4 py-2 rounded-lg transition">
-            <Plus className="w-4 h-4" /> New Rule
-          </Link>
-        }
+        actions={<Button href="/automation/new" icon={<Plus className="w-4 h-4" />}>New Rule</Button>}
       />
 
       {loading ? (
         <div className="space-y-3">
           {Array.from({ length: 4 }).map((_, i) => (
-            <div key={i} className="h-20 bg-[#0D1B2E] border border-white/5 rounded-xl animate-pulse" />
+            <Skeleton key={i} className="h-20 rounded-xl" />
           ))}
         </div>
       ) : rules.length === 0 ? (
-        <div className="bg-[#0D1B2E] border border-white/5 rounded-xl">
+        <div className="surface-premium">
           <EmptyState icon={<Zap className="w-7 h-7" />} title="No automation rules yet"
-            description="Automate repetitive tasks by setting trigger-based rules." actionLabel="New Rule" actionHref="/automation/new" />
+            description="Automate repetitive tasks by setting trigger-based rules."
+            actionLabel="New Rule" actionHref="/automation/new" />
         </div>
       ) : (
         <div className="space-y-3">
-          {rules.map(rule => (
-            <div key={rule.id} className={clsx('bg-[#0D1B2E] border rounded-xl p-5 flex items-center gap-4 transition',
-              rule.is_active ? 'border-white/5' : 'border-white/3 opacity-60')}>
+          {rules.map((rule, idx) => (
+            <div key={rule.id}
+                 className={clsx('surface-premium hover-lift p-5 flex items-center gap-4 transition anim-rise',
+                   !rule.is_active && 'opacity-60')}
+                 style={{ animationDelay: `${Math.min(idx * 30, 200)}ms` }}>
               <div className={clsx('w-10 h-10 rounded-xl flex items-center justify-center shrink-0',
-                rule.is_active ? 'bg-[#F47920]/20' : 'bg-white/5')}>
+                rule.is_active ? 'bg-[#F47920]/15' : 'bg-white/[0.04]')}>
                 <Zap className={clsx('w-5 h-5', rule.is_active ? 'text-[#F47920]' : 'text-slate-500')} />
               </div>
 
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2 mb-0.5">
                   <p className="text-white font-medium">{rule.name}</p>
-                  {!rule.is_active && <span className="text-[10px] bg-slate-700/50 text-slate-400 px-1.5 py-0.5 rounded font-semibold">PAUSED</span>}
+                  {!rule.is_active && <StatusPill tone="slate" size="xs">Paused</StatusPill>}
                 </div>
                 <p className="text-slate-500 text-xs">
                   When <span className="text-blue-400">{EVENT_LABELS[rule.trigger_event] ?? rule.trigger_event}</span>
@@ -111,11 +113,11 @@ export default function AutomationPage() {
               </div>
 
               <div className="text-right shrink-0 hidden md:block">
-                <p className="text-[#F47920] font-bold text-sm">{rule.run_count.toLocaleString()}</p>
-                <p className="text-slate-600 text-xs">runs</p>
+                <p className="text-[#F47920] font-bold text-sm tabular-nums">{rule.run_count.toLocaleString()}</p>
+                <p className="text-slate-600 text-[10px] uppercase tracking-wider font-bold">runs</p>
               </div>
 
-              <div className="flex items-center gap-2 shrink-0">
+              <div className="flex items-center gap-1.5 shrink-0">
                 <button
                   onClick={() => toggleRule(rule.id, rule.is_active)}
                   className={clsx('w-8 h-8 rounded-lg flex items-center justify-center transition',

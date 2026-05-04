@@ -7,6 +7,8 @@ import {
   Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend,
 } from 'recharts'
 import { TrendingUp, TrendingDown, DollarSign, Users, TicketCheck, Star } from 'lucide-react'
+import { useTheme } from '@/components/ThemeProvider'
+import { getChartTheme } from '@/lib/chart-theme'
 
 type Overview = {
   revenueMonth: number; revenueGrowth: number | null
@@ -23,7 +25,7 @@ const fmt = (n: number) =>
 
 function KpiCard({ label, value, sub, icon, positive }: { label: string; value: string; sub?: string; icon: React.ReactNode; positive?: boolean }) {
   return (
-    <div className="bg-[#0D1B2E] border border-white/5 rounded-xl p-5">
+    <div className="surface-premium hover-lift p-5">
       <div className="flex items-center justify-between mb-3">
         <p className="text-slate-400 text-xs font-medium uppercase tracking-wide">{label}</p>
         <div className="w-8 h-8 rounded-lg bg-[#F47920]/10 flex items-center justify-center text-[#F47920]">{icon}</div>
@@ -43,6 +45,16 @@ function KpiCard({ label, value, sub, icon, positive }: { label: string; value: 
 const COLORS = ['#F47920','#3B82F6','#10B981','#8B5CF6','#F59E0B','#EC4899','#06B6D4']
 
 export default function ReportsPage() {
+  const { resolvedTheme } = useTheme()
+  const ct = getChartTheme(resolvedTheme)
+  const tooltipStyle = {
+    background: ct.tooltipBg,
+    border: `1px solid ${ct.tooltipBorder}`,
+    borderRadius: 8,
+  }
+  const tooltipLabel = { color: ct.tooltipText, fontSize: 12 }
+  const tooltipItem  = { color: ct.tooltipText }
+
   const [overview, setOverview] = useState<Overview | null>(null)
   const [revenue, setRevenue] = useState<RevenuePoint[]>([])
   const [pipeline, setPipeline] = useState<StageData[]>([])
@@ -71,8 +83,8 @@ export default function ReportsPage() {
   }, [])
 
   return (
-    <div className="p-6 space-y-6">
-      <PageHeader title="Reports" subtitle="Business analytics overview" />
+    <div className="p-6 mx-auto max-w-7xl space-y-6">
+      <PageHeader kicker="Analytics" title="Reports" subtitle="Business analytics overview" />
 
       {/* KPI Row */}
       <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-4">
@@ -105,7 +117,7 @@ export default function ReportsPage() {
       </div>
 
       {/* Revenue Chart */}
-      <div className="bg-[#0D1B2E] border border-white/5 rounded-xl p-6">
+      <div className="surface-premium p-6">
         <h3 className="text-white font-semibold mb-1">Revenue — Last 6 Months</h3>
         <p className="text-slate-500 text-xs mb-4">Paid invoices by month (INR)</p>
         {loading ? (
@@ -113,13 +125,15 @@ export default function ReportsPage() {
         ) : (
           <ResponsiveContainer width="100%" height={220}>
             <BarChart data={revenue} margin={{ top: 0, right: 0, left: 0, bottom: 0 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
-              <XAxis dataKey="month" tick={{ fill: '#64748B', fontSize: 11 }} axisLine={false} tickLine={false} />
-              <YAxis tick={{ fill: '#64748B', fontSize: 11 }} axisLine={false} tickLine={false}
+              <CartesianGrid strokeDasharray="3 3" stroke={ct.grid} />
+              <XAxis dataKey="month" tick={{ fill: ct.tickText, fontSize: 11 }} axisLine={false} tickLine={false} />
+              <YAxis tick={{ fill: ct.tickText, fontSize: 11 }} axisLine={false} tickLine={false}
                 tickFormatter={v => v >= 100000 ? `${(v / 100000).toFixed(1)}L` : v >= 1000 ? `${(v / 1000).toFixed(0)}K` : String(v)} />
               <Tooltip
-                contentStyle={{ background: '#0D1B2E', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 8 }}
-                labelStyle={{ color: '#fff', fontSize: 12 }}
+                contentStyle={tooltipStyle}
+                labelStyle={tooltipLabel}
+                itemStyle={tooltipItem}
+                cursor={{ fill: ct.grid }}
                 formatter={(v) => [fmt(Number(v ?? 0)), 'Revenue']}
               />
               <Bar dataKey="revenue" fill="#F47920" radius={[4, 4, 0, 0]} />
@@ -130,18 +144,20 @@ export default function ReportsPage() {
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Pipeline by Stage */}
-        <div className="bg-[#0D1B2E] border border-white/5 rounded-xl p-6">
+        <div className="surface-premium p-6">
           <h3 className="text-white font-semibold mb-1">Pipeline by Stage</h3>
           <p className="text-slate-500 text-xs mb-4">Number of deals in each stage</p>
           {loading ? <div className="h-48 bg-white/3 rounded-xl animate-pulse" /> : (
             <ResponsiveContainer width="100%" height={200}>
               <BarChart data={pipeline} layout="vertical" margin={{ top: 0, right: 16, left: 0, bottom: 0 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" horizontal={false} />
-                <XAxis type="number" tick={{ fill: '#64748B', fontSize: 11 }} axisLine={false} tickLine={false} />
-                <YAxis dataKey="name" type="category" tick={{ fill: '#CBD5E1', fontSize: 11 }} axisLine={false} tickLine={false} width={90} />
+                <CartesianGrid strokeDasharray="3 3" stroke={ct.grid} horizontal={false} />
+                <XAxis type="number" tick={{ fill: ct.tickText, fontSize: 11 }} axisLine={false} tickLine={false} />
+                <YAxis dataKey="name" type="category" tick={{ fill: ct.tickText, fontSize: 11 }} axisLine={false} tickLine={false} width={90} />
                 <Tooltip
-                  contentStyle={{ background: '#0D1B2E', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 8 }}
-                  labelStyle={{ color: '#fff', fontSize: 12 }}
+                  contentStyle={tooltipStyle}
+                  labelStyle={tooltipLabel}
+                  itemStyle={tooltipItem}
+                  cursor={{ fill: ct.grid }}
                   formatter={(v) => [Number(v ?? 0), 'Deals']}
                 />
                 <Bar dataKey="count" fill="#F47920" radius={[0, 4, 4, 0]} />
@@ -151,7 +167,7 @@ export default function ReportsPage() {
         </div>
 
         {/* Leads by Status */}
-        <div className="bg-[#0D1B2E] border border-white/5 rounded-xl p-6">
+        <div className="surface-premium p-6">
           <h3 className="text-white font-semibold mb-1">Lead Funnel</h3>
           <p className="text-slate-500 text-xs mb-4">Leads by status</p>
           {loading ? <div className="h-48 bg-white/3 rounded-xl animate-pulse" /> : leadsByStatus.length === 0 ? (
@@ -165,11 +181,12 @@ export default function ReportsPage() {
                   ))}
                 </Pie>
                 <Legend
-                  formatter={(value) => <span style={{ color: '#94A3B8', fontSize: 11 }}>{value}</span>}
+                  formatter={(value) => <span style={{ color: ct.tickText, fontSize: 11 }}>{value}</span>}
                 />
                 <Tooltip
-                  contentStyle={{ background: '#0D1B2E', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 8 }}
-                  labelStyle={{ color: '#fff', fontSize: 12 }}
+                  contentStyle={tooltipStyle}
+                  labelStyle={tooltipLabel}
+                  itemStyle={tooltipItem}
                 />
               </PieChart>
             </ResponsiveContainer>
@@ -179,17 +196,19 @@ export default function ReportsPage() {
 
       {/* Leads by Source */}
       {leadsBySource.length > 0 && (
-        <div className="bg-[#0D1B2E] border border-white/5 rounded-xl p-6">
+        <div className="surface-premium p-6">
           <h3 className="text-white font-semibold mb-1">Lead Sources</h3>
           <p className="text-slate-500 text-xs mb-4">Where your leads come from</p>
           <ResponsiveContainer width="100%" height={180}>
             <BarChart data={leadsBySource} margin={{ top: 0, right: 0, left: 0, bottom: 0 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
-              <XAxis dataKey="name" tick={{ fill: '#64748B', fontSize: 11 }} axisLine={false} tickLine={false} />
-              <YAxis tick={{ fill: '#64748B', fontSize: 11 }} axisLine={false} tickLine={false} />
+              <CartesianGrid strokeDasharray="3 3" stroke={ct.grid} />
+              <XAxis dataKey="name" tick={{ fill: ct.tickText, fontSize: 11 }} axisLine={false} tickLine={false} />
+              <YAxis tick={{ fill: ct.tickText, fontSize: 11 }} axisLine={false} tickLine={false} />
               <Tooltip
-                contentStyle={{ background: '#0D1B2E', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 8 }}
-                labelStyle={{ color: '#fff', fontSize: 12 }}
+                contentStyle={tooltipStyle}
+                labelStyle={tooltipLabel}
+                itemStyle={tooltipItem}
+                cursor={{ fill: ct.grid }}
               />
               <Bar dataKey="value" name="Leads" fill="#3B82F6" radius={[4, 4, 0, 0]} />
             </BarChart>
@@ -198,19 +217,21 @@ export default function ReportsPage() {
       )}
 
       {/* Revenue trend line */}
-      <div className="bg-[#0D1B2E] border border-white/5 rounded-xl p-6">
+      <div className="surface-premium p-6">
         <h3 className="text-white font-semibold mb-1">Revenue Trend</h3>
         <p className="text-slate-500 text-xs mb-4">Month-on-month revenue trajectory</p>
         {loading ? <div className="h-40 bg-white/3 rounded-xl animate-pulse" /> : (
           <ResponsiveContainer width="100%" height={160}>
             <LineChart data={revenue} margin={{ top: 4, right: 0, left: 0, bottom: 0 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
-              <XAxis dataKey="month" tick={{ fill: '#64748B', fontSize: 11 }} axisLine={false} tickLine={false} />
-              <YAxis tick={{ fill: '#64748B', fontSize: 11 }} axisLine={false} tickLine={false}
+              <CartesianGrid strokeDasharray="3 3" stroke={ct.grid} />
+              <XAxis dataKey="month" tick={{ fill: ct.tickText, fontSize: 11 }} axisLine={false} tickLine={false} />
+              <YAxis tick={{ fill: ct.tickText, fontSize: 11 }} axisLine={false} tickLine={false}
                 tickFormatter={v => v >= 100000 ? `${(v / 100000).toFixed(1)}L` : v >= 1000 ? `${(v / 1000).toFixed(0)}K` : String(v)} />
               <Tooltip
-                contentStyle={{ background: '#0D1B2E', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 8 }}
-                labelStyle={{ color: '#fff', fontSize: 12 }}
+                contentStyle={tooltipStyle}
+                labelStyle={tooltipLabel}
+                itemStyle={tooltipItem}
+                cursor={{ stroke: ct.axis }}
                 formatter={(v) => [fmt(Number(v ?? 0)), 'Revenue']}
               />
               <Line type="monotone" dataKey="revenue" stroke="#F47920" strokeWidth={2.5} dot={{ fill: '#F47920', r: 4 }} activeDot={{ r: 6 }} />

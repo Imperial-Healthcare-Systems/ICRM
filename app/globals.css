@@ -1,71 +1,688 @@
 @import "tailwindcss";
 
+/* ════════════════════════════════════════════════════════════════════
+ * IMPERIAL DESIGN TOKENS
+ * Two token sets:
+ *   1. Sidebar tokens (--sidebar-*)  — ALWAYS dark, theme-immune.
+ *   2. Content tokens                — flip with [data-theme] attribute.
+ * Default content theme = LIGHT (per product decision).
+ * ════════════════════════════════════════════════════════════════════ */
+
+:root {
+  /* ── SIDEBAR TOKENS (always dark; never overridden) ──────────────── */
+  --sidebar-bg:                 #07111F;
+  --sidebar-bg-elevated:        #102339;
+  --sidebar-border:             rgba(255, 255, 255, 0.05);
+  --sidebar-border-strong:      rgba(255, 255, 255, 0.10);
+  --sidebar-text-primary:       #FFFFFF;
+  --sidebar-text-secondary:     #CBD5E1;
+  --sidebar-text-muted:         #94A3B8;
+  --sidebar-text-faint:         #64748B;
+  --sidebar-item-hover:         rgba(255, 255, 255, 0.04);
+  --sidebar-item-active:        rgba(255, 255, 255, 0.06);
+  --sidebar-accent:             #F47920;
+  --sidebar-accent-soft:        rgba(244, 121, 32, 0.08);
+  --sidebar-accent-bright:      rgba(244, 121, 32, 0.15);
+
+  /* ── CONTENT TOKENS — DEFAULT (LIGHT) ───────────────────────────── */
+  /* Surfaces */
+  --canvas:                     #FAFAF7;     /* warm off-white, NOT pure white */
+  --surface:                    #FFFFFF;
+  --surface-elevated:           #FFFFFF;
+  --surface-sunken:             #F4F4F0;
+  --surface-overlay:            rgba(10, 14, 26, 0.45);
+
+  /* Borders */
+  --border-subtle:              rgba(15, 23, 42, 0.06);
+  --border-default:             rgba(15, 23, 42, 0.10);
+  --border-strong:              rgba(15, 23, 42, 0.16);
+
+  /* Hover/active overlays */
+  --hover-overlay-light:        rgba(15, 23, 42, 0.04);
+  --hover-overlay-medium:       rgba(15, 23, 42, 0.06);
+  --hover-overlay-strong:       rgba(15, 23, 42, 0.10);
+
+  /* Brand (saffron stays in both modes) */
+  --accent:                     #F47920;
+  --accent-hover:               #DC6A14;
+  --accent-active:              #C25C0E;
+  --accent-soft:                rgba(244, 121, 32, 0.08);
+  --accent-soft-strong:         rgba(244, 121, 32, 0.15);
+  --accent-ring:                rgba(244, 121, 32, 0.24);
+  --accent-shadow:              0 4px 14px -3px rgba(244, 121, 32, 0.32);
+
+  /* Text */
+  --text-primary:               #0A0E1A;     /* cool dark, NOT pure black */
+  --text-secondary:             #1F2937;
+  --text-tertiary:              #4B5563;
+  --text-muted:                 #6B7280;
+  --text-faint:                 #9CA3AF;
+  --text-on-accent:             #FFFFFF;
+  --text-inverse:               #FFFFFF;
+
+  /* Semantic */
+  --success:                    #059669;
+  --success-soft:               rgba(5, 150, 105, 0.08);
+  --warning:                    #D97706;
+  --warning-soft:               rgba(217, 119, 6, 0.08);
+  --danger:                     #DC2626;
+  --danger-soft:                rgba(220, 38, 38, 0.08);
+  --info:                       #2563EB;
+  --info-soft:                  rgba(37, 99, 235, 0.08);
+
+  /* Shadows — layered for soft lift in light mode */
+  --shadow-xs:  0 1px 2px rgba(15, 23, 42, 0.04);
+  --shadow-sm:  0 1px 2px rgba(15, 23, 42, 0.04), 0 1px 3px rgba(15, 23, 42, 0.06);
+  --shadow-md:  0 4px 6px -1px rgba(15, 23, 42, 0.05), 0 2px 4px -2px rgba(15, 23, 42, 0.04);
+  --shadow-lg:  0 10px 15px -3px rgba(15, 23, 42, 0.06), 0 4px 6px -4px rgba(15, 23, 42, 0.04);
+  --shadow-xl:  0 20px 25px -5px rgba(15, 23, 42, 0.08), 0 8px 10px -6px rgba(15, 23, 42, 0.04);
+  --shadow-floating: 0 12px 32px -8px rgba(15, 23, 42, 0.18), 0 4px 12px -4px rgba(15, 23, 42, 0.08);
+
+  /* Sidebar-vs-content edge — feels like sidebar floats over a bright canvas */
+  --sidebar-edge-shadow: 1px 0 0 rgba(15, 23, 42, 0.04), 4px 0 24px -8px rgba(15, 23, 42, 0.06);
+
+  /* Skeleton shimmer */
+  --shimmer-base:               rgba(15, 23, 42, 0.04);
+  --shimmer-highlight:          rgba(15, 23, 42, 0.08);
+
+  /* Scrollbars */
+  --scrollbar-thumb:            rgba(15, 23, 42, 0.10);
+  --scrollbar-thumb-hover:      rgba(15, 23, 42, 0.20);
+
+  /* Radii */
+  --radius-sm:                  6px;
+  --radius-md:                  10px;
+  --radius-lg:                  14px;
+  --radius-xl:                  18px;
+  --radius-2xl:                 22px;
+
+  /* Motion */
+  --ease-out-quart:             cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-spring:                cubic-bezier(0.34, 1.56, 0.64, 1);
+  --duration-fast:              150ms;
+  --duration-base:               240ms;
+  --duration-slow:              400ms;
+}
+
+/* ── DARK THEME OVERRIDES ──────────────────────────────────────────── */
+[data-theme="dark"] {
+  --canvas:                     #07111F;
+  --surface:                    #0D1B2E;
+  --surface-elevated:           #102339;
+  --surface-sunken:             #050B14;
+  --surface-overlay:            rgba(7, 17, 31, 0.85);
+
+  --border-subtle:              rgba(255, 255, 255, 0.05);
+  --border-default:             rgba(255, 255, 255, 0.10);
+  --border-strong:              rgba(255, 255, 255, 0.16);
+
+  --hover-overlay-light:        rgba(255, 255, 255, 0.04);
+  --hover-overlay-medium:       rgba(255, 255, 255, 0.06);
+  --hover-overlay-strong:       rgba(255, 255, 255, 0.10);
+
+  --accent-hover:               #E06810;
+  --accent-active:              #D05C0A;
+  --accent-soft:                rgba(244, 121, 32, 0.12);
+  --accent-soft-strong:         rgba(244, 121, 32, 0.20);
+  --accent-ring:                rgba(244, 121, 32, 0.32);
+  --accent-shadow:              0 6px 22px -4px rgba(244, 121, 32, 0.45);
+
+  --text-primary:               #FFFFFF;
+  --text-secondary:             #CBD5E1;
+  --text-tertiary:              #94A3B8;
+  --text-muted:                 #64748B;
+  --text-faint:                 #475569;
+
+  --success:                    #10B981;
+  --success-soft:               rgba(16, 185, 129, 0.12);
+  --warning:                    #EAB308;
+  --warning-soft:               rgba(234, 179, 8, 0.12);
+  --danger:                     #EF4444;
+  --danger-soft:                rgba(239, 68, 68, 0.12);
+  --info:                       #3B82F6;
+  --info-soft:                  rgba(59, 130, 246, 0.12);
+
+  --shadow-xs:  0 1px 2px rgba(0, 0, 0, 0.30);
+  --shadow-sm:  0 2px 6px rgba(0, 0, 0, 0.35);
+  --shadow-md:  0 6px 18px rgba(0, 0, 0, 0.40);
+  --shadow-lg:  0 18px 36px -12px rgba(0, 0, 0, 0.55);
+  --shadow-xl:  0 24px 48px -12px rgba(0, 0, 0, 0.65);
+  --shadow-floating: 0 20px 40px -12px rgba(0, 0, 0, 0.60);
+
+  --sidebar-edge-shadow: none;
+
+  --shimmer-base:               rgba(255, 255, 255, 0.04);
+  --shimmer-highlight:          rgba(255, 255, 255, 0.08);
+
+  --scrollbar-thumb:            rgba(255, 255, 255, 0.06);
+  --scrollbar-thumb-hover:      rgba(255, 255, 255, 0.12);
+}
+
+/* ── TAILWIND v4 THEME EXTENSION ─────────────────────────────────── */
+@theme {
+  --color-canvas: var(--canvas);
+  --color-surface: var(--surface);
+  --color-surface-elevated: var(--surface-elevated);
+  --color-surface-sunken: var(--surface-sunken);
+  --color-text-primary: var(--text-primary);
+  --color-text-secondary: var(--text-secondary);
+  --color-text-tertiary: var(--text-tertiary);
+  --color-text-muted: var(--text-muted);
+  --color-text-faint: var(--text-faint);
+  --color-border-subtle: var(--border-subtle);
+  --color-border-default: var(--border-default);
+  --color-border-strong: var(--border-strong);
+  --color-accent: var(--accent);
+  --color-accent-soft: var(--accent-soft);
+}
+
+/* ════════════════════════════════════════════════════════════════════
+ * BASE LAYER
+ * ════════════════════════════════════════════════════════════════════ */
 * {
   box-sizing: border-box;
+}
+
+html {
+  /* color-scheme drives native UI (scrollbars, form controls) */
+  color-scheme: light;
+}
+[data-theme="dark"] {
+  color-scheme: dark;
 }
 
 html, body {
   margin: 0;
   padding: 0;
-  background: #07111F;
-  color: #fff;
-  /* Tells browsers form controls (selects, date pickers, scrollbars) should render in dark mode */
-  color-scheme: dark;
+  background: var(--canvas);
+  color: var(--text-primary);
+  font-feature-settings: "ss01", "cv11", "tnum" 0;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+  transition: background-color var(--duration-base) ease, color var(--duration-base) ease;
 }
 
-/* ---- Native <select> dropdown styling ----
- * The popup panel of <select> is rendered by the OS/browser, so options inherit
- * limited CSS. These rules cover Chrome/Edge/Firefox on Windows + Linux. macOS
- * uses the native picker which respects color-scheme above.
- */
+/* ════════════════════════════════════════════════════════════════════
+ * TYPOGRAPHY SCALE — Apple SF / Inter inspired
+ * ════════════════════════════════════════════════════════════════════ */
+.text-display       { font-size: 34px; line-height: 1.1;  letter-spacing: -0.022em; font-weight: 700; }
+.text-title-1       { font-size: 28px; line-height: 1.15; letter-spacing: -0.018em; font-weight: 700; }
+.text-title-2       { font-size: 22px; line-height: 1.2;  letter-spacing: -0.014em; font-weight: 700; }
+.text-title-3       { font-size: 18px; line-height: 1.25; letter-spacing: -0.011em; font-weight: 600; }
+.text-headline      { font-size: 15px; line-height: 1.3;  letter-spacing: -0.005em; font-weight: 600; }
+.text-body          { font-size: 14px; line-height: 1.5;  letter-spacing: -0.003em; font-weight: 400; }
+.text-callout       { font-size: 13px; line-height: 1.4;  letter-spacing: 0;        font-weight: 500; }
+.text-caption       { font-size: 11px; line-height: 1.35; letter-spacing: 0.01em;   font-weight: 500; }
+.text-kicker        { font-size: 10px; line-height: 1.2;  letter-spacing: 0.12em;   font-weight: 700; text-transform: uppercase; }
+
+.tabular-nums { font-variant-numeric: tabular-nums; font-feature-settings: "tnum" 1; }
+
+/* ════════════════════════════════════════════════════════════════════
+ * GLOBAL REMAP: hardcoded surface / text / border classes → tokens
+ * Specificity bumped via :root ancestor so these win over Tailwind's
+ * generated utilities while not requiring !important.
+ * Inside .sidebar-shell, these remaps are NEUTRALISED so the sidebar
+ * stays dark regardless of theme.
+ * ════════════════════════════════════════════════════════════════════ */
+
+/* Surface backgrounds — content-side */
+:root .bg-\[\#07111F\]   { background-color: var(--canvas); }
+:root .bg-\[\#050B14\]   { background-color: var(--canvas); }
+:root .bg-\[\#0D1B2E\]   { background-color: var(--surface); }
+:root .bg-\[\#102339\]   { background-color: var(--surface-elevated); }
+:root .bg-\[\#0A1628\]   { background-color: var(--surface); }       /* deal-card colour */
+:root .bg-\[\#0f2744\]   { background-color: var(--surface-elevated); }
+
+/* Sidebar override — restore dark surfaces inside sidebar */
+.sidebar-shell .bg-\[\#07111F\]   { background-color: var(--sidebar-bg); }
+.sidebar-shell .bg-\[\#0D1B2E\]   { background-color: var(--sidebar-bg); }
+.sidebar-shell .bg-\[\#102339\]   { background-color: var(--sidebar-bg-elevated); }
+.sidebar-shell .border-white\/5   { border-color: var(--sidebar-border); }
+.sidebar-shell .border-white\/10  { border-color: var(--sidebar-border-strong); }
+.sidebar-shell .border-white\/\[0\.06\] { border-color: var(--sidebar-border); }
+.sidebar-shell .text-white         { color: var(--sidebar-text-primary); }
+.sidebar-shell .text-slate-300     { color: var(--sidebar-text-secondary); }
+.sidebar-shell .text-slate-400     { color: var(--sidebar-text-muted); }
+.sidebar-shell .text-slate-500     { color: var(--sidebar-text-faint); }
+.sidebar-shell .text-slate-600     { color: rgba(255,255,255,0.30); }
+.sidebar-shell .bg-white\/5,
+.sidebar-shell .bg-white\/\[0\.04\],
+.sidebar-shell .bg-white\/\[0\.06\] { background-color: var(--sidebar-item-hover); }
+.sidebar-shell .hover\:bg-white\/5:hover,
+.sidebar-shell .hover\:bg-white\/10:hover,
+.sidebar-shell .hover\:bg-white\/\[0\.04\]:hover,
+.sidebar-shell .hover\:bg-white\/\[0\.06\]:hover,
+.sidebar-shell .hover\:bg-white\/\[0\.08\]:hover { background-color: var(--sidebar-item-hover); }
+.sidebar-shell .hover\:text-slate-200:hover { color: var(--sidebar-text-primary); }
+.sidebar-shell .hover\:text-white:hover     { color: var(--sidebar-text-primary); }
+
+/* Light-mode TEXT remap (content area only — sidebar already overrides) */
+[data-theme="light"] .text-white       { color: var(--text-primary); }
+[data-theme="light"] .text-slate-200   { color: var(--text-primary); }
+[data-theme="light"] .text-slate-300   { color: var(--text-secondary); }
+[data-theme="light"] .text-slate-400   { color: var(--text-tertiary); }
+[data-theme="light"] .text-slate-500   { color: var(--text-muted); }
+[data-theme="light"] .text-slate-600   { color: var(--text-faint); }
+[data-theme="light"] .placeholder-slate-500::placeholder { color: var(--text-faint); }
+[data-theme="light"] .placeholder-slate-400::placeholder { color: var(--text-faint); }
+[data-theme="light"] .hover\:text-white:hover     { color: var(--text-primary); }
+[data-theme="light"] .hover\:text-slate-200:hover { color: var(--text-primary); }
+[data-theme="light"] .hover\:text-slate-300:hover { color: var(--text-secondary); }
+
+/* Light-mode BORDER remap (content) */
+[data-theme="light"] .border-white\/5,
+[data-theme="light"] .border-white\/\[0\.04\],
+[data-theme="light"] .border-white\/\[0\.06\]      { border-color: var(--border-subtle); }
+[data-theme="light"] .border-white\/10              { border-color: var(--border-default); }
+[data-theme="light"] .border-white\/15,
+[data-theme="light"] .border-white\/20              { border-color: var(--border-strong); }
+[data-theme="light"] .divide-white\/5 > * + *       { border-color: var(--border-subtle); }
+[data-theme="light"] .divide-white\/\[0\.04\] > * + *,
+[data-theme="light"] .divide-white\/\[0\.06\] > * + * { border-color: var(--border-subtle); }
+[data-theme="light"] .hover\:border-white\/10:hover,
+[data-theme="light"] .hover\:border-white\/15:hover,
+[data-theme="light"] .hover\:border-white\/20:hover,
+[data-theme="light"] .hover\:border-white\/25:hover  { border-color: var(--border-strong); }
+[data-theme="light"] .border-white\/8                 { border-color: var(--border-subtle); }
+
+/* Light-mode HOVER overlays */
+[data-theme="light"] .hover\:bg-white\/2:hover,
+[data-theme="light"] .hover\:bg-white\/\[0\.02\]:hover { background-color: rgba(15, 23, 42, 0.02); }
+[data-theme="light"] .hover\:bg-white\/3:hover,
+[data-theme="light"] .hover\:bg-white\/\[0\.03\]:hover { background-color: rgba(15, 23, 42, 0.03); }
+[data-theme="light"] .hover\:bg-white\/5:hover,
+[data-theme="light"] .hover\:bg-white\/\[0\.04\]:hover,
+[data-theme="light"] .hover\:bg-white\/\[0\.06\]:hover { background-color: var(--hover-overlay-light); }
+[data-theme="light"] .hover\:bg-white\/8:hover { background-color: rgba(15, 23, 42, 0.05); }
+[data-theme="light"] .hover\:bg-white\/10:hover,
+[data-theme="light"] .hover\:bg-white\/\[0\.08\]:hover { background-color: var(--hover-overlay-medium); }
+[data-theme="light"] .hover\:bg-white\/\[0\.12\]:hover,
+[data-theme="light"] .hover\:bg-white\/\[0\.14\]:hover,
+[data-theme="light"] .active\:bg-white\/\[0\.12\]:active,
+[data-theme="light"] .active\:bg-white\/\[0\.14\]:active { background-color: var(--hover-overlay-strong); }
+
+/* group-hover variants */
+[data-theme="light"] .group:hover .group-hover\:border-white\/10 { border-color: var(--border-default); }
+[data-theme="light"] .group:hover .group-hover\:border-white\/15 { border-color: var(--border-strong); }
+
+/* Gradient stops — Tailwind v4 sets --tw-gradient-from/--tw-gradient-via,
+   we override the colour values; --tw-gradient-stops keeps the var references
+   so re-evaluation pulls the new colour. */
+[data-theme="light"] .from-white\/5  { --tw-gradient-from: rgb(15 23 42 / 0.04); }
+[data-theme="light"] .from-white\/10 { --tw-gradient-from: rgb(15 23 42 / 0.06); }
+[data-theme="light"] .from-white\/15 { --tw-gradient-from: rgb(15 23 42 / 0.08); }
+[data-theme="light"] .from-white\/20 { --tw-gradient-from: rgb(15 23 42 / 0.10); }
+[data-theme="light"] .via-white\/5   { --tw-gradient-via: rgb(15 23 42 / 0.04); }
+[data-theme="light"] .via-white\/10  { --tw-gradient-via: rgb(15 23 42 / 0.06); }
+[data-theme="light"] .to-white\/5    { --tw-gradient-to: rgb(15 23 42 / 0.04); }
+[data-theme="light"] .to-white\/10   { --tw-gradient-to: rgb(15 23 42 / 0.06); }
+
+/* Light-mode static overlays (filled inputs, hover layers used as bg) */
+[data-theme="light"] .bg-white\/5,
+[data-theme="light"] .bg-white\/\[0\.02\],
+[data-theme="light"] .bg-white\/\[0\.03\],
+[data-theme="light"] .bg-white\/\[0\.04\],
+[data-theme="light"] .bg-white\/\[0\.06\] { background-color: var(--surface-sunken); }
+[data-theme="light"] .bg-white\/8,
+[data-theme="light"] .bg-white\/10,
+[data-theme="light"] .bg-white\/\[0\.08\] { background-color: var(--hover-overlay-medium); }
+[data-theme="light"] .bg-white\/3        { background-color: var(--surface-sunken); }
+
+/* Light-mode dividers (used inside cards) */
+[data-theme="light"] .divide-y > * + * { border-color: var(--border-subtle); }
+
+/* ════════════════════════════════════════════════════════════════════
+ * SURFACE HELPERS — token-driven
+ * ════════════════════════════════════════════════════════════════════ */
+.surface-card {
+  background: var(--surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-sm);
+}
+[data-theme="dark"] .surface-card { box-shadow: none; }
+
+.surface-elevated {
+  background: var(--surface-elevated);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-md);
+}
+
+.surface-premium {
+  background: var(--surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-sm);
+  position: relative;
+  transition: box-shadow var(--duration-base) var(--ease-out-quart);
+}
+[data-theme="dark"] .surface-premium {
+  background: linear-gradient(180deg, rgba(255,255,255,0.025), transparent 30%), var(--surface);
+  box-shadow: none;
+}
+[data-theme="dark"] .surface-premium::before {
+  content: '';
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,0.08), transparent);
+  border-radius: var(--radius-xl) var(--radius-xl) 0 0;
+  pointer-events: none;
+}
+
+/* Hairline divider */
+.hairline {
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--border-default), transparent);
+}
+
+/* ════════════════════════════════════════════════════════════════════
+ * SIDEBAR SHELL
+ * Wrapper that locks tokens to dark — applied on the <aside>.
+ * ════════════════════════════════════════════════════════════════════ */
+.sidebar-shell {
+  background: var(--sidebar-bg);
+  color: var(--sidebar-text-primary);
+  color-scheme: dark;
+  /* In light mode: visually float the sidebar against the bright canvas */
+  box-shadow: var(--sidebar-edge-shadow);
+}
+
+/* ════════════════════════════════════════════════════════════════════
+ * FORM CONTROLS
+ * ════════════════════════════════════════════════════════════════════ */
 select option {
-  background-color: #0D1B2E;
-  color: #fff;
+  background-color: var(--surface);
+  color: var(--text-primary);
   padding: 8px 12px;
 }
-
 select option:checked,
 select option:hover {
-  background: linear-gradient(0deg, rgba(244, 121, 32, 0.25), rgba(244, 121, 32, 0.25)), #0D1B2E;
-  color: #F47920;
+  background: linear-gradient(0deg, var(--accent-soft), var(--accent-soft)), var(--surface);
+  color: var(--accent);
 }
+select option:disabled { color: var(--text-faint); }
+select option[value=""] { color: var(--text-tertiary); font-style: italic; }
 
-select option:disabled {
-  color: #475569;
-}
-
-/* The empty/placeholder option (e.g. "Select account") */
-select option[value=""] {
-  color: #94a3b8;
-  font-style: italic;
-}
-
-/* ---- Native date / time / datetime-local pickers ---- */
+/* Date/time picker icons — adapt to theme */
 input[type="date"]::-webkit-calendar-picker-indicator,
 input[type="datetime-local"]::-webkit-calendar-picker-indicator,
 input[type="time"]::-webkit-calendar-picker-indicator {
-  filter: invert(0.7);
   cursor: pointer;
-  opacity: 0.6;
-  transition: opacity 0.15s;
+  opacity: 0.55;
+  transition: opacity var(--duration-fast);
+}
+[data-theme="dark"] input[type="date"]::-webkit-calendar-picker-indicator,
+[data-theme="dark"] input[type="datetime-local"]::-webkit-calendar-picker-indicator,
+[data-theme="dark"] input[type="time"]::-webkit-calendar-picker-indicator {
+  filter: invert(0.7);
 }
 input[type="date"]:hover::-webkit-calendar-picker-indicator,
 input[type="datetime-local"]:hover::-webkit-calendar-picker-indicator,
-input[type="time"]:hover::-webkit-calendar-picker-indicator {
-  opacity: 1;
-}
+input[type="time"]:hover::-webkit-calendar-picker-indicator { opacity: 1; }
 
-/* ---- Number input spinners ---- */
 input[type="number"]::-webkit-inner-spin-button,
-input[type="number"]::-webkit-outer-spin-button {
-  filter: invert(0.7);
-  opacity: 0.5;
-}
+input[type="number"]::-webkit-outer-spin-button { opacity: 0.45; }
+[data-theme="dark"] input[type="number"]::-webkit-inner-spin-button,
+[data-theme="dark"] input[type="number"]::-webkit-outer-spin-button { filter: invert(0.7); }
 input[type="number"]:hover::-webkit-inner-spin-button,
-input[type="number"]:hover::-webkit-outer-spin-button {
-  opacity: 0.9;
+input[type="number"]:hover::-webkit-outer-spin-button { opacity: 0.9; }
+
+/* Focus rings — works on both themes */
+button:focus-visible,
+a:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible,
+[role="button"]:focus-visible,
+[role="checkbox"]:focus-visible,
+[role="combobox"]:focus-visible,
+[role="menuitem"]:focus-visible,
+[role="option"]:focus-visible,
+[role="tab"]:focus-visible,
+[tabindex]:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  transition: outline-offset var(--duration-fast);
+}
+input:focus-visible,
+textarea:focus-visible,
+select:focus-visible {
+  outline: none;
+  border-color: var(--accent) !important;
+  box-shadow: 0 0 0 3px var(--accent-ring);
 }
 
-/* Hide scrollbar for sidebar */
+/* ════════════════════════════════════════════════════════════════════
+ * SCROLLBARS — themed
+ * ════════════════════════════════════════════════════════════════════ */
+*::-webkit-scrollbar           { width: 10px; height: 10px; }
+*::-webkit-scrollbar-track     { background: transparent; }
+*::-webkit-scrollbar-thumb     { background: var(--scrollbar-thumb); border-radius: 8px; border: 2px solid transparent; background-clip: padding-box; }
+*::-webkit-scrollbar-thumb:hover { background: var(--scrollbar-thumb-hover); border: 2px solid transparent; background-clip: padding-box; }
 .scrollbar-hide::-webkit-scrollbar { display: none; }
 .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
+
+/* ════════════════════════════════════════════════════════════════════
+ * ANIMATIONS
+ * ════════════════════════════════════════════════════════════════════ */
+@keyframes rise-fade {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.anim-rise { animation: rise-fade 280ms var(--ease-out-quart) both; }
+
+@keyframes scale-in {
+  from { opacity: 0; transform: scale(0.96); }
+  to   { opacity: 1; transform: scale(1); }
+}
+.anim-scale-in { animation: scale-in 200ms var(--ease-out-quart) both; }
+
+@keyframes fade-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+.anim-fade-in { animation: fade-in 180ms var(--ease-out-quart) both; }
+
+/* Theme-aware shimmer */
+@keyframes shimmer {
+  0%   { background-position: -200% 0; }
+  100% { background-position:  200% 0; }
+}
+.anim-shimmer {
+  background: linear-gradient(90deg, var(--shimmer-base) 0%, var(--shimmer-highlight) 50%, var(--shimmer-base) 100%);
+  background-size: 200% 100%;
+  animation: shimmer 1.6s ease-in-out infinite;
+}
+
+/* Subtle hover lift for interactive cards — uses themed shadow */
+.hover-lift {
+  transition: transform var(--duration-base) var(--ease-out-quart),
+              border-color var(--duration-fast),
+              box-shadow var(--duration-base);
+}
+.hover-lift:hover {
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-md);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .anim-rise, .anim-scale-in, .anim-fade-in, .anim-shimmer { animation: none !important; }
+  .hover-lift { transition: none; transform: none; }
+  body { transition: none !important; }
+}
+
+/* ════════════════════════════════════════════════════════════════════
+ * SELECTION
+ * ════════════════════════════════════════════════════════════════════ */
+::selection {
+  background: var(--accent-soft-strong);
+  color: var(--accent-active);
+}
+[data-theme="dark"] ::selection {
+  background: var(--accent-soft);
+  color: var(--text-primary);
+}
+
+/* ════════════════════════════════════════════════════════════════════
+ * PREMIUM POLISH — light-mode-specific refinements
+ * ════════════════════════════════════════════════════════════════════ */
+
+/* Saffron accent button gets the Stripe/Linear inset highlight in light mode */
+[data-theme="light"] .bg-\[\#F47920\] {
+  box-shadow: var(--shadow-sm), inset 0 1px 0 rgba(255, 255, 255, 0.20);
+}
+[data-theme="light"] .bg-\[\#F47920\]:hover {
+  box-shadow: var(--shadow-md), inset 0 1px 0 rgba(255, 255, 255, 0.25);
+}
+
+/* Status pills tuned for light mode — softer fills, deeper text */
+[data-theme="light"] .bg-blue-500\/15    { background-color: rgb(239 246 255); }
+[data-theme="light"] .text-blue-400      { color: rgb(29 78 216); }
+[data-theme="light"] .bg-emerald-500\/15 { background-color: rgb(236 253 245); }
+[data-theme="light"] .text-emerald-400   { color: rgb(4 120 87); }
+[data-theme="light"] .bg-red-500\/15     { background-color: rgb(254 242 242); }
+[data-theme="light"] .text-red-400       { color: rgb(185 28 28); }
+[data-theme="light"] .bg-orange-500\/15  { background-color: rgb(255 247 237); }
+[data-theme="light"] .text-orange-400    { color: rgb(194 65 12); }
+[data-theme="light"] .bg-yellow-500\/15  { background-color: rgb(254 252 232); }
+[data-theme="light"] .text-yellow-400    { color: rgb(161 98 7); }
+[data-theme="light"] .bg-purple-500\/15  { background-color: rgb(250 245 255); }
+[data-theme="light"] .text-purple-400    { color: rgb(126 34 206); }
+[data-theme="light"] .bg-cyan-500\/15    { background-color: rgb(236 254 255); }
+[data-theme="light"] .text-cyan-400      { color: rgb(14 116 144); }
+[data-theme="light"] .bg-pink-500\/15    { background-color: rgb(253 242 248); }
+[data-theme="light"] .text-pink-400      { color: rgb(190 24 93); }
+[data-theme="light"] .bg-rose-500\/15    { background-color: rgb(255 241 242); }
+[data-theme="light"] .text-rose-400      { color: rgb(190 18 60); }
+[data-theme="light"] .bg-slate-500\/15   { background-color: rgb(241 245 249); }
+[data-theme="light"] .text-slate-300     { color: var(--text-secondary); }
+
+/* StatCard icon tiles — softer light-mode treatment */
+[data-theme="light"] .bg-blue-500\/10    { background-color: rgb(239 246 255); }
+[data-theme="light"] .bg-emerald-500\/10 { background-color: rgb(236 253 245); }
+[data-theme="light"] .bg-purple-500\/10  { background-color: rgb(250 245 255); }
+[data-theme="light"] .bg-pink-500\/10    { background-color: rgb(253 242 248); }
+[data-theme="light"] .bg-yellow-500\/10  { background-color: rgb(254 252 232); }
+[data-theme="light"] .bg-red-500\/10     { background-color: rgb(254 242 242); }
+[data-theme="light"] .bg-orange-500\/10  { background-color: rgb(255 247 237); }
+[data-theme="light"] .bg-cyan-500\/10    { background-color: rgb(236 254 255); }
+[data-theme="light"] .bg-rose-500\/10    { background-color: rgb(255 241 242); }
+[data-theme="light"] .bg-slate-500\/10   { background-color: rgb(241 245 249); }
+
+/* Avatar palette — softer in light mode */
+[data-theme="light"] .bg-blue-500\/20    { background-color: rgb(219 234 254); }
+[data-theme="light"] .text-blue-300      { color: rgb(29 78 216); }
+[data-theme="light"] .bg-emerald-500\/20 { background-color: rgb(209 250 229); }
+[data-theme="light"] .text-emerald-300   { color: rgb(4 120 87); }
+[data-theme="light"] .bg-purple-500\/20  { background-color: rgb(243 232 255); }
+[data-theme="light"] .text-purple-300    { color: rgb(126 34 206); }
+[data-theme="light"] .bg-pink-500\/20    { background-color: rgb(252 231 243); }
+[data-theme="light"] .text-pink-300      { color: rgb(190 24 93); }
+[data-theme="light"] .bg-yellow-500\/20  { background-color: rgb(254 249 195); }
+[data-theme="light"] .text-yellow-300    { color: rgb(161 98 7); }
+[data-theme="light"] .bg-cyan-500\/20    { background-color: rgb(207 250 254); }
+[data-theme="light"] .text-cyan-300      { color: rgb(14 116 144); }
+[data-theme="light"] .bg-rose-500\/20    { background-color: rgb(255 228 230); }
+[data-theme="light"] .text-rose-300      { color: rgb(190 18 60); }
+[data-theme="light"] .bg-indigo-500\/20  { background-color: rgb(224 231 255); }
+[data-theme="light"] .text-indigo-300    { color: rgb(67 56 202); }
+
+/* Brand saffron accents — subtle softening on white canvas */
+[data-theme="light"] .bg-\[\#F47920\]\/15 { background-color: rgba(244, 121, 32, 0.08); }
+[data-theme="light"] .bg-\[\#F47920\]\/10 { background-color: rgba(244, 121, 32, 0.06); }
+[data-theme="light"] .bg-\[\#F47920\]\/\[0\.08\] { background-color: rgba(244, 121, 32, 0.06); }
+
+/* Radix data-attribute variants used by Select dropdown — softer accent on white */
+[data-theme="light"] [data-highlighted].data-\[highlighted\]\:bg-\[\#F47920\]\/15 { background-color: rgba(244, 121, 32, 0.10); }
+[data-theme="light"] [data-state="checked"].data-\[state\=checked\]\:bg-\[\#F47920\]\/10 { background-color: rgba(244, 121, 32, 0.08); }
+
+/* Card avatar ring — adapts in light mode */
+[data-theme="light"] .ring-\[\#0D1B2E\] { --tw-ring-color: var(--surface); }
+
+/* ════════════════════════════════════════════════════════════════════
+ * SIDEBAR SHELL — light-mode preserves dark surface inside
+ * Re-assert tokens locally so child Tailwind classes (handled above)
+ * still resolve correctly even though the parent is in light mode.
+ * ════════════════════════════════════════════════════════════════════ */
+.sidebar-shell ::selection {
+  background: var(--accent-soft-strong);
+  color: var(--text-inverse);
+}
+
+/* Sidebar inputs/buttons should always look dark even in light mode */
+.sidebar-shell input:focus-visible,
+.sidebar-shell select:focus-visible,
+.sidebar-shell textarea:focus-visible {
+  border-color: var(--accent) !important;
+  box-shadow: 0 0 0 3px rgba(244,121,32,0.32);
+}
+
+/* ════════════════════════════════════════════════════════════════════
+ * PORTAL SHELL — public customer portal stays dark in all themes
+ * Same pattern as .sidebar-shell. Placed AFTER all [data-theme="light"]
+ * remap rules so identical-specificity selectors win via source order.
+ * ════════════════════════════════════════════════════════════════════ */
+.portal-shell {
+  /* Re-declare content tokens to dark values (same as [data-theme="dark"]) */
+  --canvas:                 #07111F;
+  --surface:                #0D1B2E;
+  --surface-elevated:       #102339;
+  --surface-sunken:         #050B14;
+  --border-subtle:          rgba(255, 255, 255, 0.05);
+  --border-default:         rgba(255, 255, 255, 0.10);
+  --border-strong:          rgba(255, 255, 255, 0.16);
+  --hover-overlay-light:    rgba(255, 255, 255, 0.04);
+  --hover-overlay-medium:   rgba(255, 255, 255, 0.06);
+  --hover-overlay-strong:   rgba(255, 255, 255, 0.10);
+  --text-primary:           #FFFFFF;
+  --text-secondary:         #CBD5E1;
+  --text-tertiary:          #94A3B8;
+  --text-muted:             #64748B;
+  --text-faint:             #475569;
+  --shimmer-base:           rgba(255, 255, 255, 0.04);
+  --shimmer-highlight:      rgba(255, 255, 255, 0.08);
+  --scrollbar-thumb:        rgba(255, 255, 255, 0.06);
+  --scrollbar-thumb-hover:  rgba(255, 255, 255, 0.12);
+
+  background: var(--canvas);
+  color: var(--text-primary);
+  color-scheme: dark;
+}
+
+/* Defensive overrides for raw Tailwind classes used inside the portal page.
+   These cancel the [data-theme="light"] global remap by appearing later in
+   the cascade with equal specificity. */
+.portal-shell .text-white         { color: #FFFFFF; }
+.portal-shell .text-slate-200     { color: #E2E8F0; }
+.portal-shell .text-slate-300     { color: #CBD5E1; }
+.portal-shell .text-slate-400     { color: #94A3B8; }
+.portal-shell .text-slate-500     { color: #64748B; }
+.portal-shell .text-slate-600     { color: #475569; }
+.portal-shell .text-slate-700     { color: #334155; }
+
+.portal-shell .bg-\[\#07111F\]    { background-color: #07111F; }
+.portal-shell .bg-\[\#050B14\]    { background-color: #050B14; }
+.portal-shell .bg-\[\#0A1628\]    { background-color: #0A1628; }
+.portal-shell .bg-\[\#0D1B2E\]    { background-color: #0D1B2E; }
+.portal-shell .bg-\[\#102339\]    { background-color: #102339; }
+
+.portal-shell .border-white\/5    { border-color: rgba(255, 255, 255, 0.05); }
+.portal-shell .border-white\/10   { border-color: rgba(255, 255, 255, 0.10); }
+.portal-shell .border-white\/15   { border-color: rgba(255, 255, 255, 0.15); }
+.portal-shell .border-white\/20   { border-color: rgba(255, 255, 255, 0.20); }
+.portal-shell .border-white\/\[0\.04\]  { border-color: rgba(255, 255, 255, 0.04); }
+.portal-shell .border-white\/\[0\.06\]  { border-color: rgba(255, 255, 255, 0.06); }
+
+.portal-shell .bg-white\/5,
+.portal-shell .bg-white\/\[0\.04\],
+.portal-shell .bg-white\/\[0\.06\] { background-color: rgba(255, 255, 255, 0.05); }
+.portal-shell .bg-white\/10,
+.portal-shell .bg-white\/\[0\.08\] { background-color: rgba(255, 255, 255, 0.10); }
+
+.portal-shell ::selection {
+  background: rgba(244, 121, 32, 0.20);
+  color: #FFFFFF;
+}

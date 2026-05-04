@@ -5,10 +5,12 @@ import Link from 'next/link'
 import { Star, Plus, Search, Brain, Flame, Thermometer, Snowflake, ChevronLeft, ChevronRight, UserCheck, Upload } from 'lucide-react'
 import PageHeader from '@/components/PageHeader'
 import EmptyState from '@/components/EmptyState'
+import StatusPill, { pillToneForStatus } from '@/components/ui/StatusPill'
+import Button from '@/components/ui/Button'
+import Skeleton from '@/components/ui/Skeleton'
+import Select from '@/components/ui/Select'
 import clsx from 'clsx'
 import toast from 'react-hot-toast'
-
-import Select from '@/components/ui/Select'
 type Lead = {
   id: string; first_name: string; last_name: string; email: string
   phone: string; company: string; job_title: string; lead_status: string
@@ -25,13 +27,13 @@ const STATUS_OPTIONS = [
   { value: 'converted', label: 'Converted' },
 ]
 
-const STATUS_COLORS: Record<string, string> = {
-  new:          'bg-blue-500/20 text-blue-400',
-  contacted:    'bg-purple-500/20 text-purple-400',
-  qualified:    'bg-emerald-500/20 text-emerald-400',
-  unqualified:  'bg-red-500/20 text-red-400',
-  converted:    'bg-orange-500/20 text-orange-400',
-  recycled:     'bg-yellow-500/20 text-yellow-400',
+const STATUS_TONE: Record<string, ReturnType<typeof pillToneForStatus>> = {
+  new:         'blue',
+  contacted:   'purple',
+  qualified:   'emerald',
+  unqualified: 'red',
+  converted:   'orange',
+  recycled:    'yellow',
 }
 
 function RatingIcon({ rating }: { rating: string }) {
@@ -135,25 +137,16 @@ export default function LeadsPage() {
   const totalPages = Math.ceil(count / pageSize)
 
   return (
-    <div className="p-6">
+    <div className="p-6 mx-auto max-w-7xl">
       <PageHeader
+        kicker="Sales"
         title="Leads"
         subtitle={`${count} total`}
         actions={
-          <div className="flex gap-2">
-            <Link
-              href="/leads/bulk"
-              className="flex items-center gap-1.5 bg-white/5 hover:bg-white/10 text-slate-300 hover:text-white text-sm font-medium px-4 py-2 rounded-lg transition border border-white/10"
-            >
-              <Upload className="w-4 h-4" /> Bulk Upload
-            </Link>
-            <Link
-              href="/leads/new"
-              className="flex items-center gap-1.5 bg-[#F47920] hover:bg-[#e06810] text-white text-sm font-semibold px-4 py-2 rounded-lg transition"
-            >
-              <Plus className="w-4 h-4" /> New Lead
-            </Link>
-          </div>
+          <>
+            <Button variant="secondary" href="/leads/bulk" icon={<Upload className="w-4 h-4" />}>Bulk Upload</Button>
+            <Button href="/leads/new" icon={<Plus className="w-4 h-4" />}>New Lead</Button>
+          </>
         }
       />
 
@@ -193,7 +186,7 @@ export default function LeadsPage() {
                 <tr key={i}>
                   {Array.from({ length: 6 }).map((_, j) => (
                     <td key={j} className="px-4 py-3 hidden xl:table-cell first:table-cell">
-                      <div className="h-4 bg-white/5 rounded animate-pulse w-3/4" />
+                      <Skeleton variant="text" className="h-3 w-3/4" />
                     </td>
                   ))}
                 </tr>
@@ -225,9 +218,9 @@ export default function LeadsPage() {
                   {lead.job_title && <span className="text-slate-500 text-xs block">{lead.job_title}</span>}
                 </td>
                 <td className="px-4 py-3 hidden lg:table-cell">
-                  <span className={`text-xs font-semibold px-2 py-0.5 rounded-full capitalize ${STATUS_COLORS[lead.lead_status] ?? 'bg-slate-500/20 text-slate-400'}`}>
+                  <StatusPill tone={STATUS_TONE[lead.lead_status] ?? 'slate'} size="sm" uppercase={false} className="capitalize">
                     {lead.lead_status}
-                  </span>
+                  </StatusPill>
                 </td>
                 <td className="px-4 py-3 hidden lg:table-cell">
                   <div className="flex items-center gap-1">

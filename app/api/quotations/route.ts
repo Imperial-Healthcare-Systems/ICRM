@@ -15,6 +15,7 @@ export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url)
   const status = searchParams.get('status')
   const search = searchParams.get('search')
+  const isEstimate = searchParams.get('is_estimate')
   const page = Number(searchParams.get('page') ?? 1)
   const pageSize = Number(searchParams.get('pageSize') ?? 20)
   const from = (page - 1) * pageSize
@@ -22,7 +23,7 @@ export async function GET(req: NextRequest) {
   let query = supabaseAdmin
     .from('crm_quotations')
     .select(`
-      id, quote_number, status, valid_until, total, currency, created_at,
+      id, quote_number, status, valid_until, total, currency, created_at, is_estimate,
       crm_accounts!account_id(name),
       crm_contacts!contact_id(first_name, last_name),
       crm_users!created_by(full_name)
@@ -33,6 +34,8 @@ export async function GET(req: NextRequest) {
 
   if (status) query = query.eq('status', status)
   if (search) query = query.or(`quote_number.ilike.%${search}%`)
+  if (isEstimate === 'true') query = query.eq('is_estimate', true)
+  else if (isEstimate === 'false') query = query.or('is_estimate.is.null,is_estimate.eq.false')
 
   const { data, count, error: dbError } = await query
   if (dbError) return NextResponse.json({ error: dbError.message }, { status: 500 })
@@ -49,16 +52,20 @@ export async function POST(req: NextRequest) {
 
   const body = await req.json()
 
+  const isEstimate = body.is_estimate === true
+  const docType = isEstimate ? 'estimate' : 'quotation'
+  const docPrefix = isEstimate ? 'EST' : 'QT'
+
   // Auto-generate quote number
   const { data: numData } = await supabaseAdmin
-    .rpc('next_doc_number', { p_org_id: orgId, p_type: 'quotation', p_prefix: 'QT' })
+    .rpc('next_doc_number', { p_org_id: orgId, p_type: docType, p_prefix: docPrefix })
 
   const { data, error: dbError } = await supabaseAdmin
     .from('crm_quotations')
     .insert({
       ...body,
       org_id: orgId,
-      quote_number: numData ?? `QT-${Date.now()}`,
+      quote_number: numData ?? `${docPrefix}-${Date.now()}`,
       created_by: actorId,
       status: body.status ?? 'draft',
     })

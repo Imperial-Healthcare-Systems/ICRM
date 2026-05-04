@@ -53,22 +53,20 @@ export default function EcosystemPage() {
   }
 
   return (
-    <div className="p-6 space-y-6">
-      <PageHeader title="Imperial Ecosystem" subtitle="Cross-module event log shared with IHRMS" />
+    <div className="p-6 mx-auto max-w-6xl space-y-6">
+      <PageHeader kicker="Integration" title="Imperial Ecosystem" subtitle="Cross-module event log shared with IHRMS" />
 
       {/* Stats */}
-      <div className="grid grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
         {[
-          { label: 'Total Events', value: stats.total, icon: <Globe className="w-4 h-4" />, color: 'text-blue-400' },
-          { label: 'Processed', value: stats.processed, icon: <CheckCircle className="w-4 h-4" />, color: 'text-emerald-400' },
-          { label: 'Pending', value: stats.pending, icon: <Clock className="w-4 h-4" />, color: 'text-yellow-400' },
+          { label: 'Total Events', value: stats.total,     icon: <Globe className="w-[18px] h-[18px]" />,        tone: 'bg-blue-500/15 text-blue-400' },
+          { label: 'Processed',    value: stats.processed, icon: <CheckCircle className="w-[18px] h-[18px]" />,  tone: 'bg-emerald-500/15 text-emerald-400' },
+          { label: 'Pending',      value: stats.pending,   icon: <Clock className="w-[18px] h-[18px]" />,        tone: 'bg-yellow-500/15 text-yellow-400' },
         ].map(s => (
-          <div key={s.label} className="bg-[#0D1B2E] border border-white/5 rounded-xl p-5">
-            <div className="flex items-center justify-between mb-2">
-              <span className="text-slate-400 text-xs font-medium uppercase tracking-wide">{s.label}</span>
-              <span className={s.color}>{s.icon}</span>
-            </div>
-            <p className="text-white text-2xl font-bold">{loading ? '—' : s.value}</p>
+          <div key={s.label} className="surface-premium p-5">
+            <div className={`w-9 h-9 rounded-lg flex items-center justify-center mb-3 ${s.tone}`}>{s.icon}</div>
+            <p className="text-white text-2xl font-bold tabular-nums leading-none">{loading ? '—' : s.value}</p>
+            <p className="text-slate-400 text-[11px] mt-1.5 tracking-wide">{s.label}</p>
           </div>
         ))}
       </div>

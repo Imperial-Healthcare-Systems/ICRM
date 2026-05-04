@@ -25,15 +25,26 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   const { id } = await params
   const body = await req.json()
 
-  const ALLOWED = ['deal_id', 'account_id', 'contact_id', 'status', 'valid_until', 'items', 'subtotal', 'discount_pct', 'tax_pct', 'total', 'currency', 'notes', 'terms']
-  const updates = Object.fromEntries(Object.entries(body).filter(([k]) => ALLOWED.includes(k)))
+  const ALLOWED = ['deal_id', 'account_id', 'contact_id', 'status', 'valid_until', 'items', 'subtotal', 'discount_pct', 'tax_pct', 'total', 'currency', 'notes', 'terms', 'is_estimate']
+  const updates: Record<string, unknown> = Object.fromEntries(Object.entries(body).filter(([k]) => ALLOWED.includes(k)))
   if (!Object.keys(updates).length) return NextResponse.json({ error: 'No valid fields to update.' }, { status: 400 })
+
+  // Promote estimate → quotation: regenerate doc number with QT- prefix
+  if (updates.is_estimate === false) {
+    const { data: current } = await supabaseAdmin
+      .from('crm_quotations').select('is_estimate').eq('id', id).eq('org_id', orgId).single()
+    if (current?.is_estimate === true) {
+      const { data: numData } = await supabaseAdmin
+        .rpc('next_doc_number', { p_org_id: orgId, p_type: 'quotation', p_prefix: 'QT' })
+      if (numData) updates.quote_number = numData
+    }
+  }
 
   const { data, error: dbError } = await supabaseAdmin
     .from('crm_quotations')
     .update({ ...updates, updated_at: new Date().toISOString() })
     .eq('id', id).eq('org_id', orgId)
-    .select('id').single()
+    .select('id, quote_number').single()
 
   if (dbError) return NextResponse.json({ error: dbError.message }, { status: 500 })
   if (!data) return NextResponse.json({ error: 'Quotation not found.' }, { status: 404 })
