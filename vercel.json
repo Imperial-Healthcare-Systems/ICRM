@@ -1,11 +1,9 @@
 {
   "crons": [
-    { "path": "/api/cron/ecosystem/process", "schedule": "*/1 * * * *" },
     { "path": "/api/cron/reports/run-scheduled", "schedule": "0 7 * * *" },
     { "path": "/api/cron/billing/run-monthly", "schedule": "0 8 1 * *" },
     { "path": "/api/cron/subscriptions/recurring-invoices", "schedule": "0 6 * * *" },
     { "path": "/api/cron/contracts/renewal-alerts", "schedule": "0 9 * * *" },
-    { "path": "/api/cron/trials/expiration-check", "schedule": "0 10 * * *" },
-    { "path": "/api/cron/sequences", "schedule": "0 * * * *" }
+    { "path": "/api/cron/trials/expiration-check", "schedule": "0 10 * * *" }
   ]
 }
