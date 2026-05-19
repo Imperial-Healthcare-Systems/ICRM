@@ -1,6 +1,5 @@
-import { getServerSession } from 'next-auth'
 import { redirect } from 'next/navigation'
-import { authOptions } from '@/lib/auth'
+import { getSession } from '@/lib/session'
 import { supabaseAdmin } from '@/lib/supabase'
 import {
   Star, UserCircle, Building2, TrendingUp,
@@ -61,7 +60,7 @@ const QUICK_ADD = [
 ]
 
 export default async function DashboardPage() {
-  const session = await getServerSession(authOptions)
+  const session = await getSession()
   if (!session?.user) redirect('/login')
 
   const { orgId } = session.user

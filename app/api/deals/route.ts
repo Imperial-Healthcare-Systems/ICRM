@@ -1,15 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { supabaseAdmin } from '@/lib/supabase'
-import { requireSession } from '@/lib/session'
+import { getTenantClient, requireWriteAccess } from '@/lib/session'
 import { logAudit } from '@/lib/audit'
-import { emitEvent } from '@/lib/ecosystem'
 import { checkMutationLimit, checkReadLimit } from '@/lib/rate-limit'
 
 export async function GET(req: NextRequest) {
-  const { session, error } = await requireSession()
+  const { session, supabase, error } = await getTenantClient()
   if (error) return error
 
-  const { orgId } = session!.user
+  const { orgId } = session.user
   const limit = await checkReadLimit(orgId)
   if (!limit.success) return NextResponse.json({ error: 'Rate limit exceeded.' }, { status: 429 })
 
@@ -18,7 +16,7 @@ export async function GET(req: NextRequest) {
   const search = searchParams.get('search')
   const view = searchParams.get('view') ?? 'list'
 
-  let query = supabaseAdmin
+  let query = supabase
     .from('crm_deals')
     .select(`
       id, title, deal_value, currency, probability, deal_status,
@@ -49,17 +47,17 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
-  const { session, error } = await requireSession()
+  const { session, supabase, error } = await requireWriteAccess()
   if (error) return error
 
-  const { orgId, id: actorId } = session!.user
+  const { orgId, id: actorId } = session.user
   const limit = await checkMutationLimit(orgId)
   if (!limit.success) return NextResponse.json({ error: 'Rate limit exceeded.' }, { status: 429 })
 
   const body = await req.json()
   if (!body.title) return NextResponse.json({ error: 'title is required.' }, { status: 400 })
 
-  const { data, error: dbError } = await supabaseAdmin
+  const { data, error: dbError } = await supabase
     .from('crm_deals')
     .insert({
       ...body,

@@ -1,12 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { requireSession } from '@/lib/session'
-import { supabaseAdmin } from '@/lib/supabase'
+import { requireWriteAccess } from '@/lib/session'
 import { checkMutationLimit } from '@/lib/rate-limit'
 
 export async function POST(req: NextRequest) {
-  const { session, error } = await requireSession()
+  const { session, supabase, error } = await requireWriteAccess()
   if (error) return error
-  const { orgId, id: userId } = session!.user
+  const { orgId, id: userId } = session.user
 
   const limit = await checkMutationLimit(orgId)
   if (!limit.success) return NextResponse.json({ error: 'Rate limit exceeded.' }, { status: 429 })
@@ -14,8 +13,7 @@ export async function POST(req: NextRequest) {
   const { account_id, label, days = 30 } = await req.json()
   if (!account_id) return NextResponse.json({ error: 'account_id is required.' }, { status: 400 })
 
-  // Verify account belongs to org
-  const { data: account } = await supabaseAdmin
+  const { data: account } = await supabase
     .from('crm_accounts')
     .select('id, name')
     .eq('id', account_id).eq('org_id', orgId)
@@ -26,13 +24,12 @@ export async function POST(req: NextRequest) {
   const expiresAt = new Date()
   expiresAt.setDate(expiresAt.getDate() + Math.min(days, 90))
 
-  // Revoke any existing active tokens for this account
-  await supabaseAdmin
+  await supabase
     .from('crm_portal_tokens')
     .update({ is_active: false })
     .eq('account_id', account_id).eq('org_id', orgId).eq('is_active', true)
 
-  const { data, error: dbError } = await supabaseAdmin
+  const { data, error: dbError } = await supabase
     .from('crm_portal_tokens')
     .insert({
       org_id: orgId,

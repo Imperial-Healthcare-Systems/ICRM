@@ -1,16 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { supabaseAdmin } from '@/lib/supabase'
-import { requireSession } from '@/lib/session'
+import { requireWriteAccess } from '@/lib/session'
 import { logAudit } from '@/lib/audit'
 
-/** Convert an accepted quotation to an invoice */
 export async function POST(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const { session, error } = await requireSession()
+  const { session, supabase, error } = await requireWriteAccess()
   if (error) return error
-  const { orgId, id: actorId } = session!.user
+  const { orgId, id: actorId } = session.user
   const { id } = await params
 
-  const { data: quote } = await supabaseAdmin
+  const { data: quote } = await supabase
     .from('crm_quotations')
     .select('*')
     .eq('id', id).eq('org_id', orgId).single()
@@ -20,13 +18,13 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ id
     return NextResponse.json({ error: 'Only accepted/sent quotations can be converted.' }, { status: 400 })
   }
 
-  const { data: invNum } = await supabaseAdmin
+  const { data: invNum } = await supabase
     .rpc('next_doc_number', { p_org_id: orgId, p_type: 'invoice', p_prefix: 'INV' })
 
   const dueDate = new Date()
   dueDate.setDate(dueDate.getDate() + 30)
 
-  const { data: invoice, error: invError } = await supabaseAdmin
+  const { data: invoice, error: invError } = await supabase
     .from('crm_invoices')
     .insert({
       org_id: orgId,
@@ -52,8 +50,7 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ id
 
   if (invError || !invoice) return NextResponse.json({ error: 'Failed to create invoice.' }, { status: 500 })
 
-  // Mark quotation as accepted
-  await supabaseAdmin
+  await supabase
     .from('crm_quotations')
     .update({ status: 'accepted', updated_at: new Date().toISOString() })
     .eq('id', id).eq('org_id', orgId)

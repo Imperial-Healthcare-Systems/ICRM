@@ -1,17 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { requireSession } from '@/lib/session'
-import { supabaseAdmin } from '@/lib/supabase'
+import { getTenantClient } from '@/lib/session'
 
 export async function GET(
   _req: NextRequest,
   { params }: { params: Promise<{ orderId: string }> }
 ) {
-  const { session, error } = await requireSession()
+  const { session, supabase, error } = await getTenantClient()
   if (error) return error
-  const { orgId } = session!.user
+  const { orgId } = session.user
   const { orderId } = await params
 
-  const { data } = await supabaseAdmin
+  const { data } = await supabase
     .from('crm_payment_orders')
     .select('status, credits, amount_inr, package_id, created_at')
     .eq('cf_order_id', orderId)
@@ -20,7 +19,7 @@ export async function GET(
 
   if (!data) return NextResponse.json({ error: 'Order not found.' }, { status: 404 })
 
-  const { data: credits } = await supabaseAdmin
+  const { data: credits } = await supabase
     .from('org_credits')
     .select('balance')
     .eq('org_id', orgId)

@@ -1,13 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { requireSession } from '@/lib/session'
-import { supabaseAdmin } from '@/lib/supabase'
+import { getTenantClient } from '@/lib/session'
 import { checkReadLimit } from '@/lib/rate-limit'
 
 type CalEvent = {
   id: string
   source: 'activity' | 'field_visit' | 'task' | 'invoice' | 'contract' | 'deal' | 'project'
   title: string
-  date: string         // ISO date or datetime
+  date: string
   end_date?: string | null
   status?: string
   href: string
@@ -15,15 +14,10 @@ type CalEvent = {
   color?: string
 }
 
-/**
- * GET /api/calendar?from=YYYY-MM-DD&to=YYYY-MM-DD
- * Aggregates all dated records (activities, visits, tasks, invoice due dates,
- * contract end dates, deal close dates, project milestones) into a single feed.
- */
 export async function GET(req: NextRequest) {
-  const { session, error } = await requireSession()
+  const { session, supabase, error } = await getTenantClient()
   if (error) return error
-  const { orgId } = session!.user
+  const { orgId } = session.user
 
   const limit = await checkReadLimit(orgId)
   if (!limit.success) return NextResponse.json({ error: 'Rate limit exceeded.' }, { status: 429 })
@@ -34,8 +28,7 @@ export async function GET(req: NextRequest) {
 
   const events: CalEvent[] = []
 
-  // Activities (due_date)
-  const { data: activities } = await supabaseAdmin
+  const { data: activities } = await supabase
     .from('crm_activities')
     .select('id, subject, activity_type, status, due_date')
     .eq('org_id', orgId)
@@ -51,8 +44,7 @@ export async function GET(req: NextRequest) {
     })
   }
 
-  // Field visits (scheduled_at)
-  const { data: visits } = await supabaseAdmin
+  const { data: visits } = await supabase
     .from('crm_field_visits')
     .select('id, title, status, scheduled_at')
     .eq('org_id', orgId)
@@ -67,8 +59,7 @@ export async function GET(req: NextRequest) {
     })
   }
 
-  // Tasks (due_date)
-  const { data: tasks } = await supabaseAdmin
+  const { data: tasks } = await supabase
     .from('crm_tasks')
     .select('id, title, status, due_date, priority')
     .eq('org_id', orgId)
@@ -84,8 +75,7 @@ export async function GET(req: NextRequest) {
     })
   }
 
-  // Invoice due dates
-  const { data: invoices } = await supabaseAdmin
+  const { data: invoices } = await supabase
     .from('crm_invoices')
     .select('id, invoice_number, status, due_date, total')
     .eq('org_id', orgId)
@@ -102,8 +92,7 @@ export async function GET(req: NextRequest) {
     })
   }
 
-  // Contract end dates
-  const { data: contracts } = await supabaseAdmin
+  const { data: contracts } = await supabase
     .from('crm_contracts')
     .select('id, contract_number, title, status, end_date')
     .eq('org_id', orgId)
@@ -118,8 +107,7 @@ export async function GET(req: NextRequest) {
     })
   }
 
-  // Deal expected close dates
-  const { data: deals } = await supabaseAdmin
+  const { data: deals } = await supabase
     .from('crm_deals')
     .select('id, title, deal_status, expected_close, deal_value')
     .eq('org_id', orgId)
@@ -135,7 +123,6 @@ export async function GET(req: NextRequest) {
     })
   }
 
-  // Sort by date
   events.sort((a, b) => a.date.localeCompare(b.date))
 
   return NextResponse.json({ data: events, range: { from, to } })

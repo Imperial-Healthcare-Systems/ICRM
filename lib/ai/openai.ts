@@ -1,5 +1,6 @@
 import OpenAI from 'openai'
 import type { AIProviderAdapter, AIRequest, AIResponse } from './provider'
+import { aiKillSwitchActive } from '../cost-tracking'
 
 function getClient() {
   const apiKey = process.env.OPENAI_API_KEY
@@ -9,6 +10,12 @@ function getClient() {
 
 export const OpenAIAdapter: AIProviderAdapter = {
   async generate(request: AIRequest): Promise<AIResponse> {
+    // Spec §10 kill switch — tripped by ops when the platform monthly cap
+    // is exceeded. AI route handlers should catch this and surface a clear
+    // 503-ish message to the customer rather than spending more credits.
+    if (aiKillSwitchActive()) {
+      throw new Error('AI features are temporarily disabled platform-wide (cost cap reached). Contact support@imperialcrm.cloud.')
+    }
     const client = getClient()
 
     const messages: OpenAI.Chat.ChatCompletionMessageParam[] = []

@@ -16,6 +16,7 @@ import {
 import { useState } from 'react'
 import clsx from 'clsx'
 import Avatar from './ui/Avatar'
+import OrgSwitcher from './OrgSwitcher'
 import { useTheme } from './ThemeProvider'
 import type { Theme } from '@/lib/theme'
 
@@ -150,7 +151,7 @@ export default function Sidebar({ userName, orgName, planTier }: SidebarProps) {
             {planTier}
           </span>
         </div>
-        <p className="text-[var(--sidebar-text-faint)] text-[10px] mt-1.5 truncate">{orgName}</p>
+        <OrgSwitcher orgName={orgName} />
       </div>
 
       {/* Nav */}

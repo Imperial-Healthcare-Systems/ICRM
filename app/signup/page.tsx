@@ -1,10 +1,9 @@
 'use client'
 
 import { useState } from 'react'
-import { signIn } from 'next-auth/react'
-import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { Loader2, Building2, ShieldCheck, Eye, EyeOff } from 'lucide-react'
+import PoweredByImperial from '@/components/branding/PoweredByImperial'
 
 type Step = 'details' | 'otp'
 
@@ -16,7 +15,6 @@ const PLAN_OPTIONS = [
 ]
 
 export default function SignupPage() {
-  const router = useRouter()
   const [step, setStep] = useState<Step>('details')
   const [form, setForm] = useState({
     org_name: '',
@@ -27,7 +25,6 @@ export default function SignupPage() {
     plan_tier: 'starter',
   })
   const [otp, setOtp] = useState('')
-  const [challengeToken, setChallengeToken] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [showOtp, setShowOtp] = useState(false)
@@ -55,7 +52,6 @@ export default function SignupPage() {
         return
       }
 
-      setChallengeToken(data.challengeToken ?? '')
       setStep('otp')
     } catch {
       setError('Network error. Please try again.')
@@ -70,20 +66,22 @@ export default function SignupPage() {
     setLoading(true)
 
     try {
-      const result = await signIn('credentials', {
-        redirect: false,
-        email: form.email.trim().toLowerCase(),
-        otp,
-        challengeToken,
+      const res = await fetch('/api/auth/verify-otp', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: form.email.trim().toLowerCase(), otp }),
       })
 
-      if (result?.error) {
-        setError(result.error === 'CredentialsSignin' ? 'Incorrect OTP. Please try again.' : result.error)
+      const data = await res.json()
+
+      if (!res.ok) {
+        setError(data.error ?? 'Incorrect or expired OTP. Please try again.')
         return
       }
 
-      router.push('/dashboard')
-      router.refresh()
+      // Hard navigation so middleware + server components pick up the fresh
+      // Supabase auth cookies on the next render.
+      window.location.href = data.redirectTo ?? '/dashboard'
     } catch {
       setError('Something went wrong. Please try again.')
     } finally {
@@ -280,7 +278,11 @@ export default function SignupPage() {
           )}
         </div>
 
-        <p className="text-center text-slate-600 text-xs mt-6">
+        {/* Spec §9.2 — watermark mandatory on auth pages. No session yet,
+            so forceShow ensures it always renders. */}
+        <PoweredByImperial forceShow context="auth" />
+
+        <p className="text-center text-slate-600 text-xs mt-2">
           © {new Date().getFullYear()} Imperial Tech Innovations Pvt Ltd · GSTIN: 06AAICI5025Q1Z6
         </p>
       </div>

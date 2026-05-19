@@ -1,22 +1,21 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { supabaseAdmin } from '@/lib/supabase'
-import { requireSession } from '@/lib/session'
+import { requireWriteAccess } from '@/lib/session'
 import { checkFeature, consumeCredits } from '@/lib/feature-gate'
 import { getProviderForFeature } from '@/lib/ai/provider'
 import { OpenAIAdapter } from '@/lib/ai/openai'
 import { GeminiAdapter } from '@/lib/ai/gemini'
 
 export async function POST(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const { session, error } = await requireSession()
+  const { session, supabase, error } = await requireWriteAccess()
   if (error) return error
 
-  const { orgId, id: userId } = session!.user
+  const { orgId, id: userId } = session.user
   const { id } = await params
 
   const gate = await checkFeature(orgId, 'ai_lead_scoring', 1)
   if (!gate.allowed) return NextResponse.json({ error: gate.message }, { status: 402 })
 
-  const { data: lead } = await supabaseAdmin
+  const { data: lead } = await supabase
     .from('crm_leads')
     .select('*')
     .eq('id', id)
@@ -64,7 +63,7 @@ Respond with ONLY a JSON object: {"score": <number 0-100>, "reason": "<1 sentenc
     score = match ? Math.min(100, Math.max(0, Number(match[0]))) : 50
   }
 
-  await supabaseAdmin
+  await supabase
     .from('crm_leads')
     .update({ ai_score: score, updated_at: new Date().toISOString() })
     .eq('id', id)

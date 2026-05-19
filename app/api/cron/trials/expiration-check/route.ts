@@ -8,32 +8,58 @@ function verifyCron(req: NextRequest) {
   return req.headers.get('authorization') === `Bearer ${secret}`
 }
 
+const DAY = 86_400_000
+
+const PAST_DUE_AT_DAYS    = 0
+const READ_ONLY_AT_DAYS   = 3
+const EXPORT_ONLY_AT_DAYS = 7
+const DEACTIVATE_AT_DAYS  = 16
+
+type Subscription = {
+  id: string
+  org_id: string
+  status: string
+  trial_ends_at: string | null
+  soft_locked_at: string | null
+  read_only_at: string | null
+  export_only_at: string | null
+  deactivated_at: string | null
+}
+
+function targetStateFor(daysPast: number): {
+  status: string
+  fieldName: 'soft_locked_at' | 'read_only_at' | 'export_only_at' | 'deactivated_at'
+} {
+  if (daysPast >= DEACTIVATE_AT_DAYS)  return { status: 'deactivated', fieldName: 'deactivated_at' }
+  if (daysPast >= EXPORT_ONLY_AT_DAYS) return { status: 'export_only', fieldName: 'export_only_at' }
+  if (daysPast >= READ_ONLY_AT_DAYS)   return { status: 'read_only',   fieldName: 'read_only_at'   }
+  return { status: 'past_due', fieldName: 'soft_locked_at' }
+}
+
 export async function GET(req: NextRequest) {
   if (!verifyCron(req)) return NextResponse.json({ error: 'Unauthorized.' }, { status: 401 })
 
-  const today = new Date()
+  const now = new Date()
+  const today = now.toISOString().split('T')[0]
+
   const warningDates = [7, 3, 1].map(d => {
-    const dt = new Date(today)
-    dt.setDate(today.getDate() + d)
+    const dt = new Date(now)
+    dt.setDate(now.getDate() + d)
     return dt.toISOString().split('T')[0]
   })
 
-  // Find orgs with trials expiring in 1, 3, or 7 days
-  const { data: orgs } = await supabaseAdmin
+  const { data: warningOrgs } = await supabaseAdmin
     .from('organisations')
     .select('id, name, trial_ends_at, plan_tier')
     .eq('subscription_status', 'trial')
     .in('trial_ends_at', warningDates)
 
-  if (!orgs?.length) return NextResponse.json({ notified: 0 })
-
   let notified = 0
 
-  for (const org of orgs) {
+  for (const org of warningOrgs ?? []) {
     const trialEnd = new Date(org.trial_ends_at)
-    const daysLeft = Math.ceil((trialEnd.getTime() - today.getTime()) / (1000 * 60 * 60 * 24))
+    const daysLeft = Math.ceil((trialEnd.getTime() - now.getTime()) / DAY)
 
-    // Fetch the admin user
     const { data: admin } = await supabaseAdmin
       .from('crm_users')
       .select('full_name, email')
@@ -57,15 +83,67 @@ export async function GET(req: NextRequest) {
     }
   }
 
-  // Also lock orgs whose trial expired yesterday
-  const yesterday = new Date(today)
-  yesterday.setDate(today.getDate() - 1)
+  const { data: subs } = await supabaseAdmin
+    .from('org_subscriptions')
+    .select('id, org_id, status, trial_ends_at, soft_locked_at, read_only_at, export_only_at, deactivated_at')
+    .in('status', ['trial', 'past_due', 'read_only', 'export_only'])
 
-  await supabaseAdmin
-    .from('organisations')
-    .update({ subscription_status: 'suspended' })
-    .eq('subscription_status', 'trial')
-    .lt('trial_ends_at', today.toISOString().split('T')[0])
+  const transitions: Array<{ org_id: string; from: string; to: string }> = []
 
-  return NextResponse.json({ notified })
+  for (const sub of (subs ?? []) as Subscription[]) {
+    if (!sub.trial_ends_at) continue
+    const trialEndMs = new Date(sub.trial_ends_at).getTime()
+    if (now.getTime() < trialEndMs) continue
+
+    const daysPast = Math.floor((now.getTime() - trialEndMs) / DAY)
+    const target = targetStateFor(daysPast)
+
+    if (sub.status === target.status) continue
+
+    const transitionTime = new Date(trialEndMs + {
+      soft_locked_at: PAST_DUE_AT_DAYS,
+      read_only_at: READ_ONLY_AT_DAYS,
+      export_only_at: EXPORT_ONLY_AT_DAYS,
+      deactivated_at: DEACTIVATE_AT_DAYS,
+    }[target.fieldName] * DAY)
+
+    const updates: Record<string, unknown> = {
+      status: target.status,
+      updated_at: now.toISOString(),
+    }
+
+    if (!sub.soft_locked_at)  updates.soft_locked_at  = new Date(trialEndMs).toISOString()
+    if (target.fieldName === 'read_only_at'   && !sub.read_only_at)   updates.read_only_at   = transitionTime.toISOString()
+    if (target.fieldName === 'export_only_at' && !sub.export_only_at) updates.export_only_at = transitionTime.toISOString()
+    if (target.fieldName === 'deactivated_at' && !sub.deactivated_at) updates.deactivated_at = transitionTime.toISOString()
+
+    if (target.fieldName === 'export_only_at' && !sub.read_only_at) {
+      updates.read_only_at = new Date(trialEndMs + READ_ONLY_AT_DAYS * DAY).toISOString()
+    }
+    if (target.fieldName === 'deactivated_at') {
+      if (!sub.read_only_at)   updates.read_only_at   = new Date(trialEndMs + READ_ONLY_AT_DAYS   * DAY).toISOString()
+      if (!sub.export_only_at) updates.export_only_at = new Date(trialEndMs + EXPORT_ONLY_AT_DAYS * DAY).toISOString()
+    }
+
+    const { error: subErr } = await supabaseAdmin
+      .from('org_subscriptions')
+      .update(updates)
+      .eq('id', sub.id)
+
+    if (subErr) continue
+
+    await supabaseAdmin
+      .from('organisations')
+      .update({ subscription_status: target.status, updated_at: now.toISOString() })
+      .eq('id', sub.org_id)
+
+    transitions.push({ org_id: sub.org_id, from: sub.status, to: target.status })
+  }
+
+  return NextResponse.json({
+    today,
+    notified,
+    transitions: transitions.length,
+    detail: transitions,
+  })
 }

@@ -1,11 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { requireSession } from '@/lib/session'
-import { supabaseAdmin } from '@/lib/supabase'
+import { getTenantClient } from '@/lib/session'
 
 export async function GET(req: NextRequest) {
-  const { session, error } = await requireSession()
+  const { session, supabase, error } = await getTenantClient()
   if (error) return error
-  const { orgId } = session!.user
+  const { orgId } = session.user
 
   const months = parseInt(req.nextUrl.searchParams.get('months') ?? '6')
   const result: { month: string; revenue: number; invoices: number }[] = []
@@ -17,7 +16,7 @@ export async function GET(req: NextRequest) {
     const end = new Date(d.getFullYear(), d.getMonth() + 1, 0, 23, 59, 59).toISOString()
     const label = d.toLocaleString('en-IN', { month: 'short', year: '2-digit' })
 
-    const { data } = await supabaseAdmin
+    const { data } = await supabase
       .from('crm_invoices')
       .select('total')
       .eq('org_id', orgId)

@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { requireSession } from '@/lib/session'
-import { supabaseAdmin } from '@/lib/supabase'
+import { getTenantClient, requireWriteAccess } from '@/lib/session'
 import { checkReadLimit, checkMutationLimit } from '@/lib/rate-limit'
 import { logAudit } from '@/lib/audit'
 
@@ -9,9 +8,9 @@ function slugify(s: string) {
 }
 
 export async function GET(req: NextRequest) {
-  const { session, error } = await requireSession()
+  const { session, supabase, error } = await getTenantClient()
   if (error) return error
-  const { orgId } = session!.user
+  const { orgId } = session.user
   const limit = await checkReadLimit(orgId)
   if (!limit.success) return NextResponse.json({ error: 'Rate limit exceeded.' }, { status: 429 })
 
@@ -19,7 +18,7 @@ export async function GET(req: NextRequest) {
   const search = url.searchParams.get('search')?.trim() ?? ''
   const status = url.searchParams.get('status') ?? ''
 
-  let q = supabaseAdmin
+  let q = supabase
     .from('crm_kb_articles')
     .select(`
       id, slug, title, excerpt, category, tags, status, is_public, view_count,
@@ -37,9 +36,9 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
-  const { session, error } = await requireSession()
+  const { session, supabase, error } = await requireWriteAccess()
   if (error) return error
-  const { orgId, id: userId } = session!.user
+  const { orgId, id: userId } = session.user
   const limit = await checkMutationLimit(orgId)
   if (!limit.success) return NextResponse.json({ error: 'Rate limit exceeded.' }, { status: 429 })
 
@@ -47,18 +46,17 @@ export async function POST(req: NextRequest) {
   if (!body.title?.trim()) return NextResponse.json({ error: 'Title is required.' }, { status: 400 })
   if (!body.content?.trim()) return NextResponse.json({ error: 'Content is required.' }, { status: 400 })
 
-  // Generate unique slug
   const baseSlug = body.slug?.trim() ? slugify(body.slug) : slugify(body.title)
   let slug = baseSlug || 'article'
   for (let i = 2; i < 50; i++) {
-    const { data: clash } = await supabaseAdmin.from('crm_kb_articles').select('id').eq('org_id', orgId).eq('slug', slug).maybeSingle()
+    const { data: clash } = await supabase.from('crm_kb_articles').select('id').eq('org_id', orgId).eq('slug', slug).maybeSingle()
     if (!clash) break
     slug = `${baseSlug}-${i}`
   }
 
   const status = body.status ?? 'draft'
 
-  const { data, error: dbErr } = await supabaseAdmin.from('crm_kb_articles').insert({
+  const { data, error: dbErr } = await supabase.from('crm_kb_articles').insert({
     org_id: orgId,
     slug,
     title: body.title.trim(),

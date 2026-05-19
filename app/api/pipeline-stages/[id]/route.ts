@@ -1,15 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { supabaseAdmin } from '@/lib/supabase'
-import { requireSession } from '@/lib/session'
+import { requireWriteAccess } from '@/lib/session'
 import { checkMutationLimit } from '@/lib/rate-limit'
 
 export async function PATCH(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const { session, error } = await requireSession()
+  const { session, supabase, error } = await requireWriteAccess()
   if (error) return error
-  const { orgId } = session!.user
+  const { orgId } = session.user
 
   const limit = await checkMutationLimit(orgId)
   if (!limit.success) return NextResponse.json({ error: 'Rate limit exceeded.' }, { status: 429 })
@@ -19,7 +18,7 @@ export async function PATCH(
   const allowed = ['name', 'color', 'probability', 'position', 'is_won', 'is_lost']
   const updates = Object.fromEntries(Object.entries(body).filter(([k]) => allowed.includes(k)))
 
-  const { data, error: dbError } = await supabaseAdmin
+  const { data, error: dbError } = await supabase
     .from('crm_pipeline_stages')
     .update(updates)
     .eq('id', id).eq('org_id', orgId)
@@ -34,17 +33,16 @@ export async function DELETE(
   _req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const { session, error } = await requireSession()
+  const { session, supabase, error } = await requireWriteAccess()
   if (error) return error
-  const { orgId } = session!.user
+  const { orgId } = session.user
 
   const limit = await checkMutationLimit(orgId)
   if (!limit.success) return NextResponse.json({ error: 'Rate limit exceeded.' }, { status: 429 })
 
   const { id } = await params
 
-  // Block deletion if deals exist in this stage
-  const { count } = await supabaseAdmin
+  const { count } = await supabase
     .from('crm_deals')
     .select('id', { count: 'exact', head: true })
     .eq('stage_id', id).eq('org_id', orgId)
@@ -53,7 +51,7 @@ export async function DELETE(
     return NextResponse.json({ error: `Cannot delete — ${count} deal(s) are in this stage. Move them first.` }, { status: 409 })
   }
 
-  const { error: dbError } = await supabaseAdmin
+  const { error: dbError } = await supabase
     .from('crm_pipeline_stages')
     .delete().eq('id', id).eq('org_id', orgId)
 

@@ -1,15 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { supabaseAdmin } from '@/lib/supabase'
-import { requireSession } from '@/lib/session'
+import { getTenantClient, requireWriteAccess } from '@/lib/session'
 import { checkMutationLimit } from '@/lib/rate-limit'
 
 export async function GET() {
-  const { session, error } = await requireSession()
+  const { session, supabase, error } = await getTenantClient()
   if (error) return error
 
-  const { orgId } = session!.user
+  const { orgId } = session.user
 
-  const { data, error: dbError } = await supabaseAdmin
+  const { data, error: dbError } = await supabase
     .from('crm_pipeline_stages')
     .select('id, name, color, position, probability, is_won, is_lost')
     .eq('org_id', orgId)
@@ -20,9 +19,9 @@ export async function GET() {
 }
 
 export async function POST(req: NextRequest) {
-  const { session, error } = await requireSession()
+  const { session, supabase, error } = await requireWriteAccess()
   if (error) return error
-  const { orgId } = session!.user
+  const { orgId } = session.user
 
   const limit = await checkMutationLimit(orgId)
   if (!limit.success) return NextResponse.json({ error: 'Rate limit exceeded.' }, { status: 429 })
@@ -30,8 +29,7 @@ export async function POST(req: NextRequest) {
   const body = await req.json()
   if (!body.name) return NextResponse.json({ error: 'name is required.' }, { status: 400 })
 
-  // Get max position
-  const { data: last } = await supabaseAdmin
+  const { data: last } = await supabase
     .from('crm_pipeline_stages')
     .select('position')
     .eq('org_id', orgId)
@@ -39,7 +37,7 @@ export async function POST(req: NextRequest) {
     .limit(1)
     .single()
 
-  const { data, error: dbError } = await supabaseAdmin
+  const { data, error: dbError } = await supabase
     .from('crm_pipeline_stages')
     .insert({
       org_id: orgId,

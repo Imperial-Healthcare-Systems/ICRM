@@ -1,14 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { requireSession } from '@/lib/session'
-import { supabaseAdmin } from '@/lib/supabase'
+import type { SupabaseClient } from '@supabase/supabase-js'
+import { requireWriteAccess } from '@/lib/session'
 import { checkMutationLimit } from '@/lib/rate-limit'
 import { logAudit } from '@/lib/audit'
 
-/* POST { action: 'pause'|'resume'|'cancel'|'generate_invoice', reason? } */
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const { session, error } = await requireSession()
+  const { session, supabase, error } = await requireWriteAccess()
   if (error) return error
-  const { orgId, id: actorId } = session!.user
+  const { orgId, id: actorId } = session.user
   const limit = await checkMutationLimit(orgId)
   if (!limit.success) return NextResponse.json({ error: 'Rate limit exceeded.' }, { status: 429 })
 
@@ -16,7 +15,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   const body = await req.json()
   const action = body.action as string
 
-  const { data: sub } = await supabaseAdmin
+  const { data: sub } = await supabase
     .from('crm_subscriptions')
     .select('*, crm_accounts!account_id(id, name), crm_contacts!contact_id(id)')
     .eq('id', id).eq('org_id', orgId).single()
@@ -38,26 +37,25 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     updates.cancelled_at = now.toISOString()
     updates.auto_renew = false
   } else if (action === 'generate_invoice') {
-    // Manual on-demand invoice generation
-    return generateInvoice(orgId, actorId, sub, now)
+    return generateInvoice(supabase, orgId, actorId, sub, now)
   } else {
     return NextResponse.json({ error: 'Unknown action.' }, { status: 400 })
   }
 
-  await supabaseAdmin.from('crm_subscriptions').update(updates).eq('id', id).eq('org_id', orgId)
+  await supabase.from('crm_subscriptions').update(updates).eq('id', id).eq('org_id', orgId)
   logAudit({ org_id: orgId, actor_id: actorId, action: `subscription.${action}d`, resource_type: 'crm_subscription', resource_id: id })
   return NextResponse.json({ success: true, status: updates.status })
 }
 
-async function generateInvoice(orgId: string, actorId: string, sub: Record<string, unknown>, now: Date) {
-  const { data: invNum } = await supabaseAdmin.rpc('next_doc_number', { p_org_id: orgId, p_type: 'invoice', p_prefix: 'INV' })
+async function generateInvoice(supabase: SupabaseClient, orgId: string, actorId: string, sub: Record<string, unknown>, now: Date) {
+  const { data: invNum } = await supabase.rpc('next_doc_number', { p_org_id: orgId, p_type: 'invoice', p_prefix: 'INV' })
   const dueDate = new Date(now); dueDate.setDate(dueDate.getDate() + Number(sub.payment_terms_days ?? 7))
 
   const subtotal = Number(sub.amount)
   const taxPct = Number(sub.tax_pct ?? 0)
   const total = Math.round(subtotal * (1 + taxPct / 100))
 
-  const { data: invoice, error: invErr } = await supabaseAdmin.from('crm_invoices').insert({
+  const { data: invoice, error: invErr } = await supabase.from('crm_invoices').insert({
     org_id: orgId,
     invoice_number: invNum,
     account_id: sub.account_id,
@@ -76,12 +74,11 @@ async function generateInvoice(orgId: string, actorId: string, sub: Record<strin
 
   if (invErr || !invoice) return NextResponse.json({ error: invErr?.message ?? 'Failed to create invoice.' }, { status: 500 })
 
-  // Bump next_billing_date and counters
-  const { data: nextDate } = await supabaseAdmin.rpc('compute_next_billing_date', {
+  const { data: nextDate } = await supabase.rpc('compute_next_billing_date', {
     p_current: sub.next_billing_date, p_cycle: sub.billing_cycle, p_cycle_days: sub.cycle_days,
   })
 
-  await supabaseAdmin.from('crm_subscriptions').update({
+  await supabase.from('crm_subscriptions').update({
     last_billed_at: now.toISOString(),
     next_billing_date: nextDate,
     invoices_generated: Number(sub.invoices_generated ?? 0) + 1,

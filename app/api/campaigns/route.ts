@@ -1,13 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { requireSession } from '@/lib/session'
-import { supabaseAdmin } from '@/lib/supabase'
+import { getTenantClient, requireWriteAccess } from '@/lib/session'
 import { checkMutationLimit, checkReadLimit } from '@/lib/rate-limit'
 import { logAudit } from '@/lib/audit'
 
 export async function GET(req: NextRequest) {
-  const { session, error } = await requireSession()
+  const { session, supabase, error } = await getTenantClient()
   if (error) return error
-  const { orgId } = session!.user
+  const { orgId } = session.user
 
   const limit = await checkReadLimit(orgId)
   if (!limit.success) return NextResponse.json({ error: 'Rate limit exceeded.' }, { status: 429 })
@@ -19,7 +18,7 @@ export async function GET(req: NextRequest) {
   const type = searchParams.get('type')
   const from = (page - 1) * pageSize
 
-  let q = supabaseAdmin
+  let q = supabase
     .from('crm_campaigns')
     .select(`*, crm_users!created_by(full_name)`, { count: 'exact' })
     .eq('org_id', orgId)
@@ -35,9 +34,9 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
-  const { session, error } = await requireSession()
+  const { session, supabase, error } = await requireWriteAccess()
   if (error) return error
-  const { orgId, id: userId } = session!.user
+  const { orgId, id: userId } = session.user
 
   const limit = await checkMutationLimit(orgId)
   if (!limit.success) return NextResponse.json({ error: 'Rate limit exceeded.' }, { status: 429 })
@@ -47,7 +46,7 @@ export async function POST(req: NextRequest) {
 
   if (!name?.trim()) return NextResponse.json({ error: 'Campaign name is required' }, { status: 400 })
 
-  const { data, error: dbErr } = await supabaseAdmin.from('crm_campaigns').insert({
+  const { data, error: dbErr } = await supabase.from('crm_campaigns').insert({
     org_id: orgId,
     name: name.trim(), type, status: 'draft',
     subject, body: emailBody, from_name,

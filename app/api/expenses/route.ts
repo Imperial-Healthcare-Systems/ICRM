@@ -1,24 +1,23 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { requireSession } from '@/lib/session'
-import { supabaseAdmin } from '@/lib/supabase'
+import { getTenantClient, requireWriteAccess } from '@/lib/session'
 import { checkReadLimit, checkMutationLimit } from '@/lib/rate-limit'
 import { logAudit } from '@/lib/audit'
 
 const CATEGORIES = ['travel', 'meals', 'accommodation', 'supplies', 'software', 'marketing', 'training', 'client_entertainment', 'general', 'other']
 
 export async function GET(req: NextRequest) {
-  const { session, error } = await requireSession()
+  const { session, supabase, error } = await getTenantClient()
   if (error) return error
-  const { orgId, id: userId, role } = session!.user
+  const { orgId, id: userId, role } = session.user
   const limit = await checkReadLimit(orgId)
   if (!limit.success) return NextResponse.json({ error: 'Rate limit exceeded.' }, { status: 429 })
 
   const url = new URL(req.url)
   const status = url.searchParams.get('status') ?? ''
-  const scope = url.searchParams.get('scope') ?? 'all'  // 'mine' | 'all'
+  const scope = url.searchParams.get('scope') ?? 'all'
   const isAdmin = ['super_admin', 'admin'].includes(role)
 
-  let q = supabaseAdmin
+  let q = supabase
     .from('crm_expenses')
     .select(`
       id, expense_number, amount, currency, expense_date, category, description, status,
@@ -31,7 +30,6 @@ export async function GET(req: NextRequest) {
     .limit(200)
 
   if (status) q = q.eq('status', status)
-  // Non-admins only see their own unless scope=all is requested AND they have permission
   if (scope === 'mine' || !isAdmin) q = q.eq('user_id', userId)
 
   const { data, count } = await q
@@ -39,9 +37,9 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
-  const { session, error } = await requireSession()
+  const { session, supabase, error } = await requireWriteAccess()
   if (error) return error
-  const { orgId, id: userId } = session!.user
+  const { orgId, id: userId } = session.user
   const limit = await checkMutationLimit(orgId)
   if (!limit.success) return NextResponse.json({ error: 'Rate limit exceeded.' }, { status: 429 })
 
@@ -53,12 +51,12 @@ export async function POST(req: NextRequest) {
   if (body.category && !CATEGORIES.includes(body.category))
     return NextResponse.json({ error: 'Invalid category.' }, { status: 400 })
 
-  const { data: numData } = await supabaseAdmin.rpc('next_doc_number', { p_org_id: orgId, p_type: 'expense', p_prefix: 'EXP' })
+  const { data: numData } = await supabase.rpc('next_doc_number', { p_org_id: orgId, p_type: 'expense', p_prefix: 'EXP' })
   const expense_number = numData ?? `EXP-${Date.now()}`
 
   const status = body.submit ? 'submitted' : 'draft'
 
-  const { data, error: dbErr } = await supabaseAdmin.from('crm_expenses').insert({
+  const { data, error: dbErr } = await supabase.from('crm_expenses').insert({
     org_id: orgId,
     expense_number,
     user_id: userId,

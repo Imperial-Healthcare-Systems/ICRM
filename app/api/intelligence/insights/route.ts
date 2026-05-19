@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { requireSession } from '@/lib/session'
-import { supabaseAdmin } from '@/lib/supabase'
+import { requireWriteAccess } from '@/lib/session'
 import { checkMutationLimit } from '@/lib/rate-limit'
 import { checkFeature, consumeCredits } from '@/lib/feature-gate'
 import { getProviderForFeature } from '@/lib/ai/provider'
@@ -8,9 +7,9 @@ import { OpenAIAdapter } from '@/lib/ai/openai'
 import { GeminiAdapter } from '@/lib/ai/gemini'
 
 export async function POST(req: NextRequest) {
-  const { session, error } = await requireSession()
+  const { session, supabase, error } = await requireWriteAccess()
   if (error) return error
-  const { orgId, id: userId } = session!.user
+  const { orgId, id: userId } = session.user
 
   const limit = await checkMutationLimit(orgId)
   if (!limit.success) return NextResponse.json({ error: 'Rate limit exceeded.' }, { status: 429 })
@@ -22,10 +21,10 @@ export async function POST(req: NextRequest) {
   const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000).toISOString()
 
   const [deals, leads, invoices, tickets] = await Promise.all([
-    supabaseAdmin.from('crm_deals').select('deal_value, deal_status, probability').eq('org_id', orgId).gte('updated_at', thirtyDaysAgo),
-    supabaseAdmin.from('crm_leads').select('lead_status, lead_source').eq('org_id', orgId).gte('created_at', thirtyDaysAgo),
-    supabaseAdmin.from('crm_invoices').select('total, status').eq('org_id', orgId).gte('created_at', thirtyDaysAgo),
-    supabaseAdmin.from('crm_tickets').select('status, priority').eq('org_id', orgId).gte('created_at', thirtyDaysAgo),
+    supabase.from('crm_deals').select('deal_value, deal_status, probability').eq('org_id', orgId).gte('updated_at', thirtyDaysAgo),
+    supabase.from('crm_leads').select('lead_status, lead_source').eq('org_id', orgId).gte('created_at', thirtyDaysAgo),
+    supabase.from('crm_invoices').select('total, status').eq('org_id', orgId).gte('created_at', thirtyDaysAgo),
+    supabase.from('crm_tickets').select('status, priority').eq('org_id', orgId).gte('created_at', thirtyDaysAgo),
   ])
 
   const won = deals.data?.filter(d => d.deal_status === 'won') ?? []
@@ -55,7 +54,7 @@ Last 30 days business snapshot:
   })
 
   await consumeCredits(orgId, 'ai_insights', 2, `insights-${Date.now()}`, userId)
-  await supabaseAdmin.from('crm_ai_logs').insert({
+  await supabase.from('crm_ai_logs').insert({
     org_id: orgId, user_id: userId, feature: 'ai_insights',
     provider, total_tokens: response.tokensUsed ?? 0, credits_used: 2,
   })

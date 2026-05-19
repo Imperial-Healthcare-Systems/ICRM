@@ -1,15 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { requireSession } from '@/lib/session'
-import { supabaseAdmin } from '@/lib/supabase'
+import { getTenantClient } from '@/lib/session'
 
 type Ctx = { params: Promise<{ id: string }> }
 
 export async function GET(_req: NextRequest, { params }: Ctx) {
-  const { session, error } = await requireSession()
+  const { session, supabase, error } = await getTenantClient()
   if (error) return error
-  const { orgId } = session!.user
+  const { orgId } = session.user
   const { id } = await params
-  const { data, error: dbErr } = await supabaseAdmin
+  const { data, error: dbErr } = await supabase
     .from('crm_loyalty_transactions')
     .select(`*, crm_users!created_by(full_name)`)
     .eq('loyalty_account_id', id)

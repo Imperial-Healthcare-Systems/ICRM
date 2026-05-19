@@ -1,13 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { requireSession } from '@/lib/session'
-import { supabaseAdmin } from '@/lib/supabase'
+import { getTenantClient, requireWriteAccess } from '@/lib/session'
 import { checkReadLimit, checkMutationLimit } from '@/lib/rate-limit'
 import { logAudit } from '@/lib/audit'
 
 export async function GET(req: NextRequest) {
-  const { session, error } = await requireSession()
+  const { session, supabase, error } = await getTenantClient()
   if (error) return error
-  const { orgId } = session!.user
+  const { orgId } = session.user
 
   const limit = await checkReadLimit(orgId)
   if (!limit.success) return NextResponse.json({ error: 'Rate limit exceeded.' }, { status: 429 })
@@ -18,7 +17,7 @@ export async function GET(req: NextRequest) {
   const status = url.searchParams.get('status') ?? ''
   const search = url.searchParams.get('search')?.trim() ?? ''
 
-  let q = supabaseAdmin
+  let q = supabase
     .from('crm_tasks')
     .select(`
       id, title, status, priority, due_date, estimated_minutes, actual_minutes, project_id, position, created_at,
@@ -40,9 +39,9 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
-  const { session, error } = await requireSession()
+  const { session, supabase, error } = await requireWriteAccess()
   if (error) return error
-  const { orgId, id: actorId } = session!.user
+  const { orgId, id: actorId } = session.user
 
   const limit = await checkMutationLimit(orgId)
   if (!limit.success) return NextResponse.json({ error: 'Rate limit exceeded.' }, { status: 429 })
@@ -50,7 +49,7 @@ export async function POST(req: NextRequest) {
   const body = await req.json()
   if (!body.title?.trim()) return NextResponse.json({ error: 'Title is required.' }, { status: 400 })
 
-  const { data, error: dbErr } = await supabaseAdmin.from('crm_tasks').insert({
+  const { data, error: dbErr } = await supabase.from('crm_tasks').insert({
     org_id: orgId,
     project_id: body.project_id || null,
     title: body.title.trim(),

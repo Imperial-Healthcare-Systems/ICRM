@@ -1,18 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { requireSession } from '@/lib/session'
-import { supabaseAdmin } from '@/lib/supabase'
+import { getTenantClient, requireWriteAccess } from '@/lib/session'
 import { checkMutationLimit, checkReadLimit } from '@/lib/rate-limit'
 import { logAudit } from '@/lib/audit'
 
 export async function GET(req: NextRequest) {
-  const { session, error } = await requireSession()
+  const { session, supabase, error } = await getTenantClient()
   if (error) return error
-  const { orgId } = session!.user
+  const { orgId } = session.user
 
   const limit = await checkReadLimit(orgId)
   if (!limit.success) return NextResponse.json({ error: 'Rate limit exceeded.' }, { status: 429 })
 
-  const { data, error: dbErr } = await supabaseAdmin
+  const { data, error: dbErr } = await supabase
     .from('crm_automation_rules')
     .select(`*, crm_users!created_by(full_name)`)
     .eq('org_id', orgId)
@@ -23,9 +22,9 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
-  const { session, error } = await requireSession()
+  const { session, supabase, error } = await requireWriteAccess()
   if (error) return error
-  const { orgId, id: userId } = session!.user
+  const { orgId, id: userId } = session.user
 
   const limit = await checkMutationLimit(orgId)
   if (!limit.success) return NextResponse.json({ error: 'Rate limit exceeded.' }, { status: 429 })
@@ -37,7 +36,7 @@ export async function POST(req: NextRequest) {
   if (!trigger_event) return NextResponse.json({ error: 'Trigger event is required' }, { status: 400 })
   if (!action_type) return NextResponse.json({ error: 'Action type is required' }, { status: 400 })
 
-  const { data, error: dbErr } = await supabaseAdmin.from('crm_automation_rules').insert({
+  const { data, error: dbErr } = await supabase.from('crm_automation_rules').insert({
     org_id: orgId,
     name: name.trim(), description, trigger_event,
     trigger_conditions, action_type, action_config,

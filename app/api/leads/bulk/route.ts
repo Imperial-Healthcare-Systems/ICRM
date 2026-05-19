@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { requireSession } from '@/lib/session'
-import { supabaseAdmin } from '@/lib/supabase'
+import { requireWriteAccess } from '@/lib/session'
 import { checkMutationLimit } from '@/lib/rate-limit'
 import { logAudit } from '@/lib/audit'
 
@@ -22,9 +21,9 @@ type LeadRow = {
 }
 
 export async function POST(req: NextRequest) {
-  const { session, error } = await requireSession()
+  const { session, supabase, error } = await requireWriteAccess()
   if (error) return error
-  const { orgId, id: actorId } = session!.user
+  const { orgId, id: actorId } = session.user
 
   const limit = await checkMutationLimit(orgId)
   if (!limit.success) return NextResponse.json({ error: 'Rate limit exceeded.' }, { status: 429 })
@@ -45,7 +44,7 @@ export async function POST(req: NextRequest) {
   const errors: { row: number; message: string }[] = []
 
   leads.forEach((raw, i) => {
-    const rowNum = i + 2 // CSV row number (header is row 1)
+    const rowNum = i + 2
     const first_name = raw.first_name?.toString().trim()
     if (!first_name) {
       errors.push({ row: rowNum, message: 'first_name is required' })
@@ -79,11 +78,10 @@ export async function POST(req: NextRequest) {
 
   let inserted = 0
   if (valid.length) {
-    // Insert in chunks of 100 to avoid PostgREST payload limits
     const CHUNK = 100
     for (let i = 0; i < valid.length; i += CHUNK) {
       const slice = valid.slice(i, i + CHUNK)
-      const { data, error: dbError } = await supabaseAdmin.from('crm_leads').insert(slice).select('id')
+      const { data, error: dbError } = await supabase.from('crm_leads').insert(slice).select('id')
       if (dbError) {
         errors.push({ row: -1, message: `Batch insert failed at chunk ${i}: ${dbError.message}` })
       } else {

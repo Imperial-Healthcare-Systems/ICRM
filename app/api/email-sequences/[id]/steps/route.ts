@@ -1,23 +1,21 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { requireSession } from '@/lib/session'
-import { supabaseAdmin } from '@/lib/supabase'
+import { requireWriteAccess } from '@/lib/session'
 import { checkMutationLimit } from '@/lib/rate-limit'
 
 export async function POST(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const { session, error } = await requireSession()
+  const { session, supabase, error } = await requireWriteAccess()
   if (error) return error
-  const { orgId } = session!.user
+  const { orgId } = session.user
 
   const limit = await checkMutationLimit(orgId)
   if (!limit.success) return NextResponse.json({ error: 'Rate limit exceeded.' }, { status: 429 })
 
   const { id: sequenceId } = await params
 
-  // Verify sequence belongs to org
-  const { data: seq } = await supabaseAdmin
+  const { data: seq } = await supabase
     .from('crm_email_sequences')
     .select('id')
     .eq('id', sequenceId)
@@ -33,10 +31,9 @@ export async function POST(
     return NextResponse.json({ error: 'Subject and body are required.' }, { status: 400 })
   }
 
-  // Auto-assign step_order if not provided
   let order = step_order
   if (!order) {
-    const { data: lastStep } = await supabaseAdmin
+    const { data: lastStep } = await supabase
       .from('crm_email_sequence_steps')
       .select('step_order')
       .eq('sequence_id', sequenceId)
@@ -46,7 +43,7 @@ export async function POST(
     order = (lastStep?.step_order ?? 0) + 1
   }
 
-  const { data, error: dbError } = await supabaseAdmin
+  const { data, error: dbError } = await supabase
     .from('crm_email_sequence_steps')
     .insert({
       sequence_id: sequenceId,

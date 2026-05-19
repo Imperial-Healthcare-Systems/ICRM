@@ -1,13 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { requireSession } from '@/lib/session'
-import { supabaseAdmin } from '@/lib/supabase'
+import { getTenantClient, requireWriteAccess } from '@/lib/session'
 import { checkMutationLimit, checkReadLimit } from '@/lib/rate-limit'
 import { logAudit } from '@/lib/audit'
 
 export async function GET(req: NextRequest) {
-  const { session, error } = await requireSession()
+  const { session, supabase, error } = await getTenantClient()
   if (error) return error
-  const { orgId } = session!.user
+  const { orgId } = session.user
 
   const limit = await checkReadLimit(orgId)
   if (!limit.success) return NextResponse.json({ error: 'Rate limit exceeded.' }, { status: 429 })
@@ -18,7 +17,7 @@ export async function GET(req: NextRequest) {
   const status = searchParams.get('status')
   const from = (page - 1) * pageSize
 
-  let q = supabaseAdmin
+  let q = supabase
     .from('crm_field_visits')
     .select(`*, crm_accounts(name), crm_contacts(first_name,last_name), crm_users!assigned_to(full_name)`, { count: 'exact' })
     .eq('org_id', orgId)
@@ -33,9 +32,9 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
-  const { session, error } = await requireSession()
+  const { session, supabase, error } = await requireWriteAccess()
   if (error) return error
-  const { orgId, id: userId } = session!.user
+  const { orgId, id: userId } = session.user
 
   const limit = await checkMutationLimit(orgId)
   if (!limit.success) return NextResponse.json({ error: 'Rate limit exceeded.' }, { status: 429 })
@@ -46,12 +45,12 @@ export async function POST(req: NextRequest) {
 
   if (!title?.trim()) return NextResponse.json({ error: 'Title is required' }, { status: 400 })
 
-  const { data: numData, error: numErr } = await supabaseAdmin.rpc('next_doc_number', {
+  const { data: numData, error: numErr } = await supabase.rpc('next_doc_number', {
     p_org_id: orgId, p_type: 'visit'
   })
   if (numErr) return NextResponse.json({ error: numErr.message }, { status: 500 })
 
-  const { data, error: dbErr } = await supabaseAdmin.from('crm_field_visits').insert({
+  const { data, error: dbErr } = await supabase.from('crm_field_visits').insert({
     org_id: orgId,
     visit_number: numData,
     title: title.trim(), account_id: account_id || null, contact_id: contact_id || null,

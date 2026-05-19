@@ -1,13 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { requireSession } from '@/lib/session'
-import { supabaseAdmin } from '@/lib/supabase'
+import { getTenantClient, requireWriteAccess } from '@/lib/session'
 import { checkReadLimit, checkMutationLimit } from '@/lib/rate-limit'
 import { logAudit } from '@/lib/audit'
 
 export async function GET(req: NextRequest) {
-  const { session, error } = await requireSession()
+  const { session, supabase, error } = await getTenantClient()
   if (error) return error
-  const { orgId, id: userId } = session!.user
+  const { orgId, id: userId } = session.user
 
   const limit = await checkReadLimit(orgId)
   if (!limit.success) return NextResponse.json({ error: 'Rate limit exceeded.' }, { status: 429 })
@@ -15,11 +14,11 @@ export async function GET(req: NextRequest) {
   const url = new URL(req.url)
   const projectId = url.searchParams.get('project_id') ?? ''
   const taskId = url.searchParams.get('task_id') ?? ''
-  const scope = url.searchParams.get('scope') ?? 'all' // 'mine' | 'all'
-  const from = url.searchParams.get('from')   // YYYY-MM-DD
+  const scope = url.searchParams.get('scope') ?? 'all'
+  const from = url.searchParams.get('from')
   const to = url.searchParams.get('to')
 
-  let q = supabaseAdmin
+  let q = supabase
     .from('crm_time_entries')
     .select(`
       id, description, started_at, ended_at, duration_secs, is_billable, hourly_rate,
@@ -42,11 +41,10 @@ export async function GET(req: NextRequest) {
   return NextResponse.json({ data: data ?? [] })
 }
 
-/* Create a manual time entry (already-completed work, not a running timer). */
 export async function POST(req: NextRequest) {
-  const { session, error } = await requireSession()
+  const { session, supabase, error } = await requireWriteAccess()
   if (error) return error
-  const { orgId, id: userId } = session!.user
+  const { orgId, id: userId } = session.user
 
   const limit = await checkMutationLimit(orgId)
   if (!limit.success) return NextResponse.json({ error: 'Rate limit exceeded.' }, { status: 429 })
@@ -59,7 +57,7 @@ export async function POST(req: NextRequest) {
 
   const duration = Math.round((endedAt.getTime() - startedAt.getTime()) / 1000)
 
-  const { data, error: dbErr } = await supabaseAdmin.from('crm_time_entries').insert({
+  const { data, error: dbErr } = await supabase.from('crm_time_entries').insert({
     org_id: orgId,
     user_id: userId,
     task_id: body.task_id || null,
@@ -75,7 +73,7 @@ export async function POST(req: NextRequest) {
 
   if (dbErr || !data) return NextResponse.json({ error: dbErr?.message ?? 'Failed to log time.' }, { status: 500 })
 
-  if (data.task_id) await supabaseAdmin.rpc('recalc_task_actual_minutes', { p_task_id: data.task_id })
+  if (data.task_id) await supabase.rpc('recalc_task_actual_minutes', { p_task_id: data.task_id })
 
   logAudit({ org_id: orgId, actor_id: userId, action: 'time.logged', resource_type: 'crm_time_entry', resource_id: data.id, meta: { duration_secs: duration } })
   return NextResponse.json({ data }, { status: 201 })

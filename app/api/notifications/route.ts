@@ -1,12 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { requireSession } from '@/lib/session'
-import { supabaseAdmin } from '@/lib/supabase'
+import { getTenantClient } from '@/lib/session'
 import { checkReadLimit } from '@/lib/rate-limit'
 
 export async function GET(req: NextRequest) {
-  const { session, error } = await requireSession()
+  const { session, supabase, error } = await getTenantClient()
   if (error) return error
-  const { orgId } = session!.user
+  const { orgId } = session.user
 
   const limit = await checkReadLimit(orgId)
   if (!limit.success) return NextResponse.json({ error: 'Rate limit exceeded.' }, { status: 429 })
@@ -14,7 +13,7 @@ export async function GET(req: NextRequest) {
   const url = new URL(req.url)
   const pageSize = Math.min(50, Number(url.searchParams.get('limit') ?? 20))
 
-  const { data } = await supabaseAdmin
+  const { data } = await supabase
     .from('crm_activities')
     .select('id, subject, activity_type, status, created_at')
     .eq('org_id', orgId)

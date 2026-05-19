@@ -1,13 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { supabaseAdmin } from '@/lib/supabase'
-import { requireSession } from '@/lib/session'
+import { getTenantClient, requireWriteAccess } from '@/lib/session'
 import { logAudit } from '@/lib/audit'
 import { checkMutationLimit, checkReadLimit } from '@/lib/rate-limit'
 
 export async function GET(req: NextRequest) {
-  const { session, error } = await requireSession()
+  const { session, supabase, error } = await getTenantClient()
   if (error) return error
-  const { orgId } = session!.user
+  const { orgId } = session.user
   const limit = await checkReadLimit(orgId)
   if (!limit.success) return NextResponse.json({ error: 'Rate limit exceeded.' }, { status: 429 })
 
@@ -17,7 +16,7 @@ export async function GET(req: NextRequest) {
   const pageSize = Number(searchParams.get('pageSize') ?? 20)
   const from = (page - 1) * pageSize
 
-  let query = supabaseAdmin
+  let query = supabase
     .from('crm_proposals')
     .select(`
       id, proposal_number, title, status, valid_until, total, currency, created_at,
@@ -36,19 +35,19 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
-  const { session, error } = await requireSession()
+  const { session, supabase, error } = await requireWriteAccess()
   if (error) return error
-  const { orgId, id: actorId } = session!.user
+  const { orgId, id: actorId } = session.user
   const limit = await checkMutationLimit(orgId)
   if (!limit.success) return NextResponse.json({ error: 'Rate limit exceeded.' }, { status: 429 })
 
   const body = await req.json()
   if (!body.title) return NextResponse.json({ error: 'title is required.' }, { status: 400 })
 
-  const { data: propNum } = await supabaseAdmin
+  const { data: propNum } = await supabase
     .rpc('next_doc_number', { p_org_id: orgId, p_type: 'proposal', p_prefix: 'PRO' })
 
-  const { data, error: dbError } = await supabaseAdmin
+  const { data, error: dbError } = await supabase
     .from('crm_proposals')
     .insert({
       ...body,

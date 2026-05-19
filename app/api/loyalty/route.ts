@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { requireSession } from '@/lib/session'
-import { supabaseAdmin } from '@/lib/supabase'
+import { getTenantClient, requireWriteAccess } from '@/lib/session'
 import { checkMutationLimit, checkReadLimit } from '@/lib/rate-limit'
 import { logAudit } from '@/lib/audit'
 
@@ -12,9 +11,9 @@ function calcTier(points: number): string {
 }
 
 export async function GET(req: NextRequest) {
-  const { session, error } = await requireSession()
+  const { session, supabase, error } = await getTenantClient()
   if (error) return error
-  const { orgId } = session!.user
+  const { orgId } = session.user
 
   const limit = await checkReadLimit(orgId)
   if (!limit.success) return NextResponse.json({ error: 'Rate limit exceeded.' }, { status: 429 })
@@ -24,7 +23,7 @@ export async function GET(req: NextRequest) {
   const pageSize = Math.min(50, parseInt(searchParams.get('pageSize') ?? '20'))
   const from = (page - 1) * pageSize
 
-  const { data, count, error: dbErr } = await supabaseAdmin
+  const { data, count, error: dbErr } = await supabase
     .from('crm_loyalty_accounts')
     .select(`*, crm_contacts(first_name,last_name,email), crm_accounts(name)`, { count: 'exact' })
     .eq('org_id', orgId)
@@ -36,9 +35,9 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
-  const { session, error } = await requireSession()
+  const { session, supabase, error } = await requireWriteAccess()
   if (error) return error
-  const { orgId, id: userId } = session!.user
+  const { orgId, id: userId } = session.user
 
   const limit = await checkMutationLimit(orgId)
   if (!limit.success) return NextResponse.json({ error: 'Rate limit exceeded.' }, { status: 429 })
@@ -51,13 +50,13 @@ export async function POST(req: NextRequest) {
 
   const lookupKey = contact_id ? { contact_id } : { account_id }
 
-  const { data: existing } = await supabaseAdmin.from('crm_loyalty_accounts')
+  const { data: existing } = await supabase.from('crm_loyalty_accounts')
     .select('*').eq('org_id', orgId).match(lookupKey).maybeSingle()
 
   let loyaltyAccount = existing
 
   if (!loyaltyAccount) {
-    const { data: created, error: createErr } = await supabaseAdmin.from('crm_loyalty_accounts').insert({
+    const { data: created, error: createErr } = await supabase.from('crm_loyalty_accounts').insert({
       org_id: orgId,
       contact_id: contact_id || null, account_id: account_id || null,
       points_balance: 0, tier: 'bronze', total_earned: 0, total_redeemed: 0,
@@ -72,13 +71,13 @@ export async function POST(req: NextRequest) {
   const newRedeemed = type === 'redeem' ? loyaltyAccount.total_redeemed + Math.abs(points) : loyaltyAccount.total_redeemed
   const newTier = calcTier(newBalance)
 
-  await supabaseAdmin.from('crm_loyalty_accounts').update({
+  await supabase.from('crm_loyalty_accounts').update({
     points_balance: newBalance, tier: newTier,
     total_earned: newEarned, total_redeemed: newRedeemed,
     updated_at: new Date().toISOString(),
   }).eq('id', loyaltyAccount.id)
 
-  const { data: txn, error: txnErr } = await supabaseAdmin.from('crm_loyalty_transactions').insert({
+  const { data: txn, error: txnErr } = await supabase.from('crm_loyalty_transactions').insert({
     org_id: orgId, loyalty_account_id: loyaltyAccount.id,
     type, points: Math.abs(points), description,
     reference_id: reference_id || null, created_by: userId,

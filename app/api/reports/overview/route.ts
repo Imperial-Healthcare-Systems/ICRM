@@ -1,11 +1,10 @@
 import { NextResponse } from 'next/server'
-import { requireSession } from '@/lib/session'
-import { supabaseAdmin } from '@/lib/supabase'
+import { getTenantClient } from '@/lib/session'
 
 export async function GET() {
-  const { session, error } = await requireSession()
+  const { session, supabase, error } = await getTenantClient()
   if (error) return error
-  const { orgId } = session!.user
+  const { orgId } = session.user
 
   const now = new Date()
   const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).toISOString()
@@ -21,13 +20,13 @@ export async function GET() {
     ticketsOpen,
     contacts,
   ] = await Promise.all([
-    supabaseAdmin.from('crm_invoices').select('total').eq('org_id', orgId).eq('status', 'paid').gte('paid_date', startOfMonth),
-    supabaseAdmin.from('crm_invoices').select('total').eq('org_id', orgId).eq('status', 'paid').gte('paid_date', startOfLastMonth).lte('paid_date', endOfLastMonth),
-    supabaseAdmin.from('crm_deals').select('id', { count: 'exact', head: true }).eq('org_id', orgId).not('deal_status', 'in', '("won","lost")'),
-    supabaseAdmin.from('crm_deals').select('deal_value').eq('org_id', orgId).eq('deal_status', 'won').gte('updated_at', startOfMonth),
-    supabaseAdmin.from('crm_leads').select('id', { count: 'exact', head: true }).eq('org_id', orgId).gte('created_at', startOfMonth),
-    supabaseAdmin.from('crm_tickets').select('id', { count: 'exact', head: true }).eq('org_id', orgId).in('status', ['open', 'in_progress', 'waiting']),
-    supabaseAdmin.from('crm_contacts').select('id', { count: 'exact', head: true }).eq('org_id', orgId),
+    supabase.from('crm_invoices').select('total').eq('org_id', orgId).eq('status', 'paid').gte('paid_date', startOfMonth),
+    supabase.from('crm_invoices').select('total').eq('org_id', orgId).eq('status', 'paid').gte('paid_date', startOfLastMonth).lte('paid_date', endOfLastMonth),
+    supabase.from('crm_deals').select('id', { count: 'exact', head: true }).eq('org_id', orgId).not('deal_status', 'in', '("won","lost")'),
+    supabase.from('crm_deals').select('deal_value').eq('org_id', orgId).eq('deal_status', 'won').gte('updated_at', startOfMonth),
+    supabase.from('crm_leads').select('id', { count: 'exact', head: true }).eq('org_id', orgId).gte('created_at', startOfMonth),
+    supabase.from('crm_tickets').select('id', { count: 'exact', head: true }).eq('org_id', orgId).in('status', ['open', 'in_progress', 'waiting']),
+    supabase.from('crm_contacts').select('id', { count: 'exact', head: true }).eq('org_id', orgId),
   ])
 
   const revenueMonth = invoicesMonth.data?.reduce((s, r) => s + (r.total ?? 0), 0) ?? 0

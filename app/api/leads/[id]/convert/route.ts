@@ -1,24 +1,22 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { supabaseAdmin } from '@/lib/supabase'
-import { requireSession } from '@/lib/session'
+import { requireWriteAccess } from '@/lib/session'
 import { checkMutationLimit } from '@/lib/rate-limit'
 import { logAudit } from '@/lib/audit'
 
-/** Convert a lead into a Contact (and optionally a Deal) */
 export async function POST(
   _req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const { session, error } = await requireSession()
+  const { session, supabase, error } = await requireWriteAccess()
   if (error) return error
-  const { orgId, id: actorId } = session!.user
+  const { orgId, id: actorId } = session.user
 
   const limit = await checkMutationLimit(orgId)
   if (!limit.success) return NextResponse.json({ error: 'Rate limit exceeded.' }, { status: 429 })
 
   const { id } = await params
 
-  const { data: lead } = await supabaseAdmin
+  const { data: lead } = await supabase
     .from('crm_leads')
     .select('*')
     .eq('id', id)
@@ -30,8 +28,7 @@ export async function POST(
     return NextResponse.json({ error: 'Lead is already converted.' }, { status: 409 })
   }
 
-  // Create Contact from Lead
-  const { data: contact, error: contactError } = await supabaseAdmin
+  const { data: contact, error: contactError } = await supabase
     .from('crm_contacts')
     .insert({
       org_id: orgId,
@@ -52,10 +49,9 @@ export async function POST(
     return NextResponse.json({ error: 'Failed to create contact.' }, { status: 500 })
   }
 
-  // If lead has company, find or create Account
   let accountId: string | null = null
   if (lead.company) {
-    const { data: existingAccount } = await supabaseAdmin
+    const { data: existingAccount } = await supabase
       .from('crm_accounts')
       .select('id')
       .eq('org_id', orgId)
@@ -66,7 +62,7 @@ export async function POST(
     if (existingAccount) {
       accountId = existingAccount.id
     } else {
-      const { data: newAccount } = await supabaseAdmin
+      const { data: newAccount } = await supabase
         .from('crm_accounts')
         .insert({ org_id: orgId, name: lead.company, created_by: actorId })
         .select('id')
@@ -75,8 +71,7 @@ export async function POST(
     }
   }
 
-  // Mark lead as converted
-  await supabaseAdmin
+  await supabase
     .from('crm_leads')
     .update({
       lead_status: 'converted',

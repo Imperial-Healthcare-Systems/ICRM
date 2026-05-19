@@ -1,23 +1,21 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { requireSession } from '@/lib/session'
-import { supabaseAdmin } from '@/lib/supabase'
+import { requireWriteAccess } from '@/lib/session'
 import { checkMutationLimit } from '@/lib/rate-limit'
 
 export async function POST(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const { session, error } = await requireSession()
+  const { session, supabase, error } = await requireWriteAccess()
   if (error) return error
-  const { orgId } = session!.user
+  const { orgId } = session.user
 
   const limit = await checkMutationLimit(orgId)
   if (!limit.success) return NextResponse.json({ error: 'Rate limit exceeded.' }, { status: 429 })
 
   const { id: sequenceId } = await params
 
-  // Verify sequence belongs to org and is active
-  const { data: seq } = await supabaseAdmin
+  const { data: seq } = await supabase
     .from('crm_email_sequences')
     .select('id, status')
     .eq('id', sequenceId)
@@ -32,8 +30,7 @@ export async function POST(
 
   if (!contact_id) return NextResponse.json({ error: 'contact_id is required.' }, { status: 400 })
 
-  // Verify contact belongs to org
-  const { data: contact } = await supabaseAdmin
+  const { data: contact } = await supabase
     .from('crm_contacts')
     .select('id')
     .eq('id', contact_id)
@@ -42,8 +39,7 @@ export async function POST(
 
   if (!contact) return NextResponse.json({ error: 'Contact not found.' }, { status: 404 })
 
-  // Check not already enrolled
-  const { data: existing } = await supabaseAdmin
+  const { data: existing } = await supabase
     .from('crm_email_sequence_enrollments')
     .select('id, status')
     .eq('sequence_id', sequenceId)
@@ -53,8 +49,7 @@ export async function POST(
 
   if (existing) {
     if (existing.status === 'active') return NextResponse.json({ error: 'Contact is already enrolled.' }, { status: 409 })
-    // Re-activate if previously completed/paused
-    const { data: updated } = await supabaseAdmin
+    const { data: updated } = await supabase
       .from('crm_email_sequence_enrollments')
       .update({ status: 'active', current_step: 0, next_send_at: new Date().toISOString() })
       .eq('id', existing.id)
@@ -63,7 +58,7 @@ export async function POST(
     return NextResponse.json({ data: updated })
   }
 
-  const { data, error: dbError } = await supabaseAdmin
+  const { data, error: dbError } = await supabase
     .from('crm_email_sequence_enrollments')
     .insert({
       org_id: orgId,

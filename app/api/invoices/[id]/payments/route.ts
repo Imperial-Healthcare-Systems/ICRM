@@ -1,22 +1,20 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { supabaseAdmin } from '@/lib/supabase'
-import { requireSession } from '@/lib/session'
+import { getTenantClient, requireWriteAccess } from '@/lib/session'
 import { checkReadLimit, checkMutationLimit } from '@/lib/rate-limit'
 import { logAudit } from '@/lib/audit'
 
 const PAYMENT_METHODS = ['cash', 'bank_transfer', 'cheque', 'upi', 'card', 'online', 'other']
 
-/* ─── List payments for an invoice ─── */
 export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const { session, error } = await requireSession()
+  const { session, supabase, error } = await getTenantClient()
   if (error) return error
-  const { orgId } = session!.user
+  const { orgId } = session.user
 
   const limit = await checkReadLimit(orgId)
   if (!limit.success) return NextResponse.json({ error: 'Rate limit exceeded.' }, { status: 429 })
 
   const { id } = await params
-  const { data } = await supabaseAdmin
+  const { data } = await supabase
     .from('crm_invoice_payments')
     .select('id, amount, currency, payment_method, reference, paid_at, notes, created_at, crm_users!created_by(full_name)')
     .eq('invoice_id', id)
@@ -26,18 +24,10 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
   return NextResponse.json({ data: data ?? [] })
 }
 
-/* ─── Record a new payment ───
- * The crm_invoice_payments ledger is the source of truth. After every
- * insert, paid_amount is recomputed as the sum of all ledger entries
- * and status is auto-derived:
- *   sum = 0       → status unchanged (caller picked draft / sent / overdue)
- *   0 < sum < total → status = 'partially_paid'
- *   sum ≥ total   → status = 'paid'
- */
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const { session, error } = await requireSession()
+  const { session, supabase, error } = await requireWriteAccess()
   if (error) return error
-  const { orgId, id: actorId } = session!.user
+  const { orgId, id: actorId } = session.user
 
   const limit = await checkMutationLimit(orgId)
   if (!limit.success) return NextResponse.json({ error: 'Rate limit exceeded.' }, { status: 429 })
@@ -59,7 +49,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     return NextResponse.json({ error: `Invalid payment_method. Allowed: ${PAYMENT_METHODS.join(', ')}` }, { status: 400 })
   }
 
-  const { data: invoice } = await supabaseAdmin
+  const { data: invoice } = await supabase
     .from('crm_invoices')
     .select('id, total, currency, status, due_date')
     .eq('id', invoiceId)
@@ -73,8 +63,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
   const total = Number(invoice.total ?? 0)
 
-  // Compute current ledger sum BEFORE the insert
-  const { data: existing } = await supabaseAdmin
+  const { data: existing } = await supabase
     .from('crm_invoice_payments')
     .select('amount')
     .eq('invoice_id', invoiceId)
@@ -89,8 +78,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     }, { status: 400 })
   }
 
-  // Insert ledger entry
-  const { data: payment, error: payErr } = await supabaseAdmin
+  const { data: payment, error: payErr } = await supabase
     .from('crm_invoice_payments')
     .insert({
       org_id: orgId,
@@ -108,7 +96,6 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
   if (payErr || !payment) return NextResponse.json({ error: payErr?.message ?? 'Failed to record payment.' }, { status: 500 })
 
-  // Derive new status from the ledger
   const newStatus = deriveStatus(projected, total, invoice.status, invoice.due_date)
   const updates: Record<string, unknown> = {
     paid_amount: projected,
@@ -116,7 +103,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     updated_at: new Date().toISOString(),
   }
   if (newStatus === 'paid') updates.paid_date = paid_at.split('T')[0]
-  await supabaseAdmin.from('crm_invoices').update(updates).eq('id', invoiceId).eq('org_id', orgId)
+  await supabase.from('crm_invoices').update(updates).eq('id', invoiceId).eq('org_id', orgId)
 
   logAudit({
     org_id: orgId,
@@ -133,12 +120,10 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   }, { status: 201 })
 }
 
-/* Derive invoice status from the ledger sum. */
 function deriveStatus(paid: number, total: number, currentStatus: string, dueDate: string | null): string {
   if (['cancelled', 'void'].includes(currentStatus)) return currentStatus
   if (paid >= total - 0.01) return 'paid'
   if (paid > 0) return 'partially_paid'
-  // No payments — preserve current state but fall back sensibly
   if (currentStatus === 'paid' || currentStatus === 'partially_paid') {
     const today = new Date().toISOString().split('T')[0]
     return dueDate && dueDate < today ? 'overdue' : 'sent'

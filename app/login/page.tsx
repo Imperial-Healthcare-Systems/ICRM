@@ -1,14 +1,13 @@
 'use client'
 
 import { useState, Suspense } from 'react'
-import { signIn } from 'next-auth/react'
-import { useRouter, useSearchParams } from 'next/navigation'
+import { useSearchParams } from 'next/navigation'
 import { Loader2, Mail, ShieldCheck, ArrowLeft, Eye, EyeOff } from 'lucide-react'
+import PoweredByImperial from '@/components/branding/PoweredByImperial'
 
 type Step = 'email' | 'otp'
 
 function LoginForm() {
-  const router = useRouter()
   const searchParams = useSearchParams()
   const callbackUrl = searchParams.get('callbackUrl') ?? '/dashboard'
   const denied = searchParams.get('denied') === '1'
@@ -16,7 +15,6 @@ function LoginForm() {
   const [step, setStep] = useState<Step>('email')
   const [email, setEmail] = useState('')
   const [otp, setOtp] = useState('')
-  const [challengeToken, setChallengeToken] = useState('')
   const [maskedEmail, setMaskedEmail] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
@@ -41,7 +39,6 @@ function LoginForm() {
         return
       }
 
-      setChallengeToken(data.challengeToken ?? '')
       setMaskedEmail(data.masked ?? email)
       setStep('otp')
     } catch {
@@ -57,20 +54,23 @@ function LoginForm() {
     setLoading(true)
 
     try {
-      const result = await signIn('credentials', {
-        redirect: false,
-        email: email.trim().toLowerCase(),
-        otp,
-        challengeToken,
+      const res = await fetch('/api/auth/verify-otp', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: email.trim().toLowerCase(), otp }),
       })
 
-      if (result?.error) {
-        setError(result.error === 'CredentialsSignin' ? 'Incorrect OTP. Please try again.' : result.error)
+      const data = await res.json()
+
+      if (!res.ok) {
+        setError(data.error ?? 'Incorrect or expired OTP. Please try again.')
         return
       }
 
-      router.push(callbackUrl)
-      router.refresh()
+      // Hard navigation so middleware + server components pick up the fresh
+      // Supabase auth cookies on the next render.
+      const target = callbackUrl !== '/dashboard' ? callbackUrl : (data.redirectTo ?? '/dashboard')
+      window.location.href = target
     } catch {
       setError('Something went wrong. Please try again.')
     } finally {
@@ -216,7 +216,12 @@ function LoginForm() {
           )}
         </div>
 
-        <p className="text-center text-slate-600 text-xs mt-6">
+        {/* Spec §9.2 — watermark mandatory on auth pages. No session yet,
+            so client-side level check can't suppress; forceShow ensures it
+            always renders here. */}
+        <PoweredByImperial forceShow context="auth" />
+
+        <p className="text-center text-slate-600 text-xs mt-2">
           © {new Date().getFullYear()} Imperial Tech Innovations Pvt Ltd · GSTIN: 06AAICI5025Q1Z6
         </p>
       </div>

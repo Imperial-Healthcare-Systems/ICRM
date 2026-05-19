@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { requireSession } from '@/lib/session'
-import { supabaseAdmin } from '@/lib/supabase'
+import { getTenantClient, requireWriteAccess } from '@/lib/session'
 import { checkReadLimit, checkMutationLimit } from '@/lib/rate-limit'
 import { logAudit } from '@/lib/audit'
 
@@ -8,13 +7,13 @@ const ALLOWED = ['target_amount', 'period_end', 'territory_id', 'metric', 'notes
 
 export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
-  const { session, error } = await requireSession()
+  const { session, supabase, error } = await getTenantClient()
   if (error) return error
-  const { orgId } = session!.user
+  const { orgId } = session.user
   const limit = await checkReadLimit(orgId)
   if (!limit.success) return NextResponse.json({ error: 'Rate limit exceeded.' }, { status: 429 })
 
-  const { data, error: dbErr } = await supabaseAdmin
+  const { data, error: dbErr } = await supabase
     .from('crm_quotas')
     .select(`*, crm_users!user_id(id, full_name, email), crm_territories!territory_id(id, name)`)
     .eq('id', id)
@@ -23,15 +22,15 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
 
   if (dbErr || !data) return NextResponse.json({ error: 'Not found.' }, { status: 404 })
 
-  const { data: achieved } = await supabaseAdmin.rpc('quota_achievement', { p_quota_id: id })
+  const { data: achieved } = await supabase.rpc('quota_achievement', { p_quota_id: id })
   return NextResponse.json({ data: { ...data, achieved: Number(achieved ?? 0) } })
 }
 
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
-  const { session, error } = await requireSession()
+  const { session, supabase, error } = await requireWriteAccess()
   if (error) return error
-  const { orgId, id: actorId, role } = session!.user
+  const { orgId, id: actorId, role } = session.user
   if (!['super_admin', 'admin', 'manager'].includes(role)) return NextResponse.json({ error: 'Insufficient permissions.' }, { status: 403 })
   const limit = await checkMutationLimit(orgId)
   if (!limit.success) return NextResponse.json({ error: 'Rate limit exceeded.' }, { status: 429 })
@@ -46,7 +45,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   }
   update.updated_at = new Date().toISOString()
 
-  const { data, error: dbErr } = await supabaseAdmin
+  const { data, error: dbErr } = await supabase
     .from('crm_quotas')
     .update(update)
     .eq('id', id)
@@ -62,14 +61,14 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 
 export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
-  const { session, error } = await requireSession()
+  const { session, supabase, error } = await requireWriteAccess()
   if (error) return error
-  const { orgId, id: actorId, role } = session!.user
+  const { orgId, id: actorId, role } = session.user
   if (!['super_admin', 'admin'].includes(role)) return NextResponse.json({ error: 'Insufficient permissions.' }, { status: 403 })
   const limit = await checkMutationLimit(orgId)
   if (!limit.success) return NextResponse.json({ error: 'Rate limit exceeded.' }, { status: 429 })
 
-  const { error: dbErr } = await supabaseAdmin
+  const { error: dbErr } = await supabase
     .from('crm_quotas')
     .delete()
     .eq('id', id)

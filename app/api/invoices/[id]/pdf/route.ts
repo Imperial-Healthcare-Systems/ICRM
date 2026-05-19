@@ -1,15 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { supabaseAdmin } from '@/lib/supabase'
-import { requireSession } from '@/lib/session'
+import { getTenantClient } from '@/lib/session'
 import { buildInvoicePdf, loadInvoiceForPdf } from '@/lib/invoice-pdf'
 
 export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const { session, error } = await requireSession()
+  const { session, supabase, error } = await getTenantClient()
   if (error) return error
-  const { orgId } = session!.user
+  const { orgId } = session.user
 
   const { id } = await params
-  const data = await loadInvoiceForPdf(supabaseAdmin, id, orgId)
+  const data = await loadInvoiceForPdf(supabase, id, orgId)
   if (!data) return NextResponse.json({ error: 'Invoice not found.' }, { status: 404 })
 
   const pdf = buildInvoicePdf(data)

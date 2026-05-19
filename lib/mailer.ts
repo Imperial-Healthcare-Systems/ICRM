@@ -1,3 +1,5 @@
+import { WATERMARK_LINES } from './branding-constants'
+
 function emailHeader(title: string, subtitle?: string) {
   return `
   <div style="background:linear-gradient(135deg,#07111F 0%,#0f2744 100%);padding:24px 32px;text-align:center">
@@ -10,8 +12,18 @@ function emailHeader(title: string, subtitle?: string) {
   </div>`
 }
 
+// Spec §9.2 mandates the canonical watermark line on every email. Today
+// the receivers might not yet be on a tier that suppresses it, so we
+// always render it. When the org-branding-aware mailer wrapper lands
+// (Phase 6 follow-up), pass `hideWatermark` from getOrgBranding instead.
 function emailFooter() {
-  return `<p style="font-size:11px;color:#94a3b8;text-align:center;margin:16px 0 0">Imperial Tech Innovations Pvt Ltd · GSTIN: 06AAICI5025Q1Z6 · This is an automated message, please do not reply.</p>`
+  return `
+  <p style="font-size:11px;color:#94a3b8;text-align:center;margin:16px 0 4px">
+    ${WATERMARK_LINES.icrm}
+  </p>
+  <p style="font-size:10px;color:#64748b;text-align:center;margin:0">
+    Imperial Healthcare Systems Pvt Ltd · CIN: U62099HR2025PTC137921 · GSTIN: 06AAICI5025Q1Z6 · This is an automated message, please do not reply.
+  </p>`
 }
 
 function getMailConfig() {
@@ -37,6 +49,62 @@ async function createTransporter() {
   const nodemailer = (nodemailerModule.default ?? nodemailerModule) as typeof nodemailerModule
   const transporter = nodemailer.createTransport({ host, port, secure, auth: { user, pass } })
   return { transporter, from }
+}
+
+/* ── INVITATION (spec-shaped, with acceptUrl) ──────────────── */
+/**
+ * Spec §6.1 invitation email. Different from the legacy sendInviteEmail
+ * (which assumed the invitee already exists in crm_users). This version
+ * sends a tokenized accept link that points at /invite/accept; the
+ * invitee verifies their email via OTP at that page and only THEN does
+ * a membership get provisioned.
+ */
+export async function sendInvitationEmail(params: {
+  to: string
+  orgName: string
+  inviterName: string
+  role: string
+  acceptUrl: string
+  expiresAt: string
+  orgId?: string
+}) {
+  const { to, orgName, inviterName, role, acceptUrl, expiresAt } = params
+  const { transporter, from } = await createTransporter()
+  const roleLabel = role.replace(/_/g, ' ')
+  const expiresAtFmt = new Date(expiresAt).toLocaleDateString('en-IN', {
+    day: 'numeric', month: 'long', year: 'numeric',
+  })
+
+  const html = `
+  <div style="font-family:'Segoe UI',Arial,sans-serif;background:#f8fafc;padding:24px;">
+    <div style="max-width:520px;margin:0 auto;background:#fff;border-radius:16px;overflow:hidden;border:1px solid #e2e8f0;box-shadow:0 4px 16px rgba(0,0,0,0.06)">
+      ${emailHeader('You\'re invited', `${inviterName} invited you to join ${orgName} on Imperial CRM`)}
+      <div style="padding:28px 32px">
+        <p style="font-size:15px;color:#1e293b;margin:0 0 12px">
+          You've been invited to join <strong>${orgName}</strong> as <strong>${roleLabel}</strong>.
+        </p>
+        <p style="font-size:14px;color:#475569;margin:0 0 22px">
+          Click the button below to verify your email and finish setting up your account. The link expires on <strong>${expiresAtFmt}</strong>.
+        </p>
+        <div style="text-align:center;margin:24px 0 8px">
+          <a href="${acceptUrl}" style="display:inline-block;background:#F47920;color:#fff;text-decoration:none;font-weight:700;font-size:14px;padding:12px 28px;border-radius:10px">
+            Accept invitation
+          </a>
+        </div>
+        <p style="font-size:12px;color:#94a3b8;text-align:center;margin:18px 0 0;word-break:break-all">
+          Or copy this link: <a href="${acceptUrl}" style="color:#1565C0">${acceptUrl}</a>
+        </p>
+      </div>
+      ${emailFooter()}
+    </div>
+  </div>`
+
+  await transporter.sendMail({
+    from,
+    to,
+    subject: `${inviterName} invited you to ${orgName} on Imperial CRM`,
+    html,
+  })
 }
 
 /* ── OTP / SIGN-IN ─────────────────────────────────────────── */
@@ -241,6 +309,68 @@ export async function sendInvoiceEmail(params: {
     subject: `Invoice ${invoiceNumber} — ${amount} due on ${fmt(dueDate)}`,
     html,
     text: `Dear ${name},\n\nInvoice ${invoiceNumber} for ${orgName}.\nAmount: ${amount}\nDue: ${fmt(dueDate)}\n${invoiceUrl ? `View: ${invoiceUrl}` : ''}`,
+  })
+}
+
+/* ── PLATFORM COST CAP ALERT (ops-only) ───────────────────────── */
+/**
+ * Spec §10 — alert sent to ops when platform AI spend crosses a cap.
+ * Plain ops email; no customer branding. The cron de-bounces escalations
+ * so this won't fire on every tick of a sustained over-cap state.
+ */
+export async function sendCostAlertEmail(params: {
+  to: string | string[]
+  status: 'warn' | 'over_daily' | 'over_monthly'
+  message: string
+  dailySpend: number
+  dailyCap: number
+  monthlySpend: number
+  monthlyCap: number
+  byProvider: Record<string, number>
+}) {
+  const { transporter, from } = await createTransporter()
+  const { to, status, message, dailySpend, dailyCap, monthlySpend, monthlyCap, byProvider } = params
+
+  const subjectPrefix = status === 'over_monthly' ? '🚨 OVER MONTHLY CAP'
+    : status === 'over_daily' ? '⚠️ OVER DAILY CAP'
+    : '⚠️ Approaching AI cap'
+
+  const providerRows = Object.entries(byProvider)
+    .map(([p, credits]) => `<tr><td style="padding:6px 12px;font-size:12px;color:#475569">${p}</td><td style="padding:6px 12px;font-size:12px;font-weight:600;color:#0f172a">${Math.round(credits as number).toLocaleString('en-IN')}</td></tr>`)
+    .join('')
+
+  const html = `
+  <div style="font-family:'Segoe UI',Arial,sans-serif;background:#f8fafc;padding:24px">
+    <div style="max-width:600px;margin:0 auto;background:#fff;border-radius:12px;overflow:hidden;border:1px solid #e2e8f0">
+      <div style="padding:20px 24px;background:${status === 'over_monthly' ? '#7f1d1d' : status === 'over_daily' ? '#9a3412' : '#854d0e'};color:#fff">
+        <div style="font-size:11px;text-transform:uppercase;letter-spacing:.08em;opacity:.85">Imperial Platform Cost Alert</div>
+        <div style="font-size:20px;font-weight:800;margin-top:4px">${subjectPrefix}</div>
+      </div>
+      <div style="padding:20px 24px">
+        <p style="font-size:14px;color:#0f172a;margin:0 0 16px;line-height:1.6">${message}</p>
+        <table style="width:100%;border-collapse:collapse;border:1px solid #e2e8f0;border-radius:8px;overflow:hidden">
+          <thead style="background:#f1f5f9"><tr><th style="padding:8px 12px;text-align:left;font-size:11px;color:#475569">Window</th><th style="padding:8px 12px;text-align:right;font-size:11px;color:#475569">Spend</th><th style="padding:8px 12px;text-align:right;font-size:11px;color:#475569">Cap</th></tr></thead>
+          <tbody>
+            <tr><td style="padding:8px 12px;font-size:12px">Today</td><td style="padding:8px 12px;text-align:right;font-size:12px;font-weight:700">₹${Math.round(dailySpend).toLocaleString('en-IN')}</td><td style="padding:8px 12px;text-align:right;font-size:12px;color:#64748b">₹${Math.round(dailyCap).toLocaleString('en-IN')}</td></tr>
+            <tr><td style="padding:8px 12px;font-size:12px;border-top:1px solid #e2e8f0">This month</td><td style="padding:8px 12px;text-align:right;font-size:12px;font-weight:700;border-top:1px solid #e2e8f0">₹${Math.round(monthlySpend).toLocaleString('en-IN')}</td><td style="padding:8px 12px;text-align:right;font-size:12px;color:#64748b;border-top:1px solid #e2e8f0">₹${Math.round(monthlyCap).toLocaleString('en-IN')}</td></tr>
+          </tbody>
+        </table>
+        ${providerRows ? `
+        <div style="margin-top:16px">
+          <div style="font-size:11px;font-weight:700;color:#475569;text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px">Credits today by provider</div>
+          <table style="width:100%;border-collapse:collapse;border:1px solid #e2e8f0;border-radius:8px;overflow:hidden">${providerRows}</table>
+        </div>` : ''}
+        <p style="font-size:11px;color:#64748b;margin:18px 0 0">Action: review Admin Console → Cost Monitor. Set <code>AI_KILL_SWITCH=true</code> in ICRM env to disable AI calls platform-wide.</p>
+      </div>
+    </div>
+  </div>`
+
+  await transporter.sendMail({
+    from,
+    to: Array.isArray(to) ? to.join(',') : to,
+    subject: `${subjectPrefix} — Imperial Platform AI`,
+    html,
+    text: `${subjectPrefix}\n${message}\nToday: ₹${Math.round(dailySpend)} / ₹${Math.round(dailyCap)}\nMonth: ₹${Math.round(monthlySpend)} / ₹${Math.round(monthlyCap)}`,
   })
 }
 

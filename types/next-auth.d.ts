@@ -1,6 +1,13 @@
 import 'next-auth'
 import 'next-auth/jwt'
 
+type ImpersonatedBy = {
+  identityId: string
+  email: string
+  name: string
+  startedAt: string
+} | null
+
 declare module 'next-auth' {
   interface User {
     role: string
@@ -9,6 +16,10 @@ declare module 'next-auth' {
     subscriptionStatus: string
     isAdmin: boolean
     isManager: boolean
+    identityId?: string | null
+    membershipId?: string | null
+    membershipRole?: string | null
+    impersonatedBy?: ImpersonatedBy
   }
 
   interface Session {
@@ -23,6 +34,10 @@ declare module 'next-auth' {
       subscriptionStatus: string
       isAdmin: boolean
       isManager: boolean
+      identityId?: string | null
+      membershipId?: string | null
+      membershipRole?: string | null
+      impersonatedBy?: ImpersonatedBy
     }
   }
 }
@@ -35,5 +50,9 @@ declare module 'next-auth/jwt' {
     subscriptionStatus: string
     isAdmin: boolean
     isManager: boolean
+    identityId?: string | null
+    membershipId?: string | null
+    membershipRole?: string | null
+    impersonatedBy?: ImpersonatedBy
   }
 }

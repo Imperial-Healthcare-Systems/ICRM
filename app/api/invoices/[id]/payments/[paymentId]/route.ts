@@ -1,22 +1,19 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { supabaseAdmin } from '@/lib/supabase'
-import { requireSession } from '@/lib/session'
+import { requireWriteAccess } from '@/lib/session'
 import { checkMutationLimit } from '@/lib/rate-limit'
 import { logAudit } from '@/lib/audit'
 
-/* ─── Reverse a payment (delete + recompute invoice) ─── */
 export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ id: string; paymentId: string }> }) {
-  const { session, error } = await requireSession()
+  const { session, supabase, error } = await requireWriteAccess()
   if (error) return error
-  const { orgId, id: actorId } = session!.user
+  const { orgId, id: actorId } = session.user
 
   const limit = await checkMutationLimit(orgId)
   if (!limit.success) return NextResponse.json({ error: 'Rate limit exceeded.' }, { status: 429 })
 
   const { id: invoiceId, paymentId } = await params
 
-  // Fetch the payment to know how much to reverse
-  const { data: payment } = await supabaseAdmin
+  const { data: payment } = await supabase
     .from('crm_invoice_payments')
     .select('id, amount')
     .eq('id', paymentId)
@@ -26,24 +23,21 @@ export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ 
 
   if (!payment) return NextResponse.json({ error: 'Payment not found.' }, { status: 404 })
 
-  // Delete the payment row
-  const { error: delErr } = await supabaseAdmin
+  const { error: delErr } = await supabase
     .from('crm_invoice_payments')
     .delete()
     .eq('id', paymentId)
     .eq('org_id', orgId)
   if (delErr) return NextResponse.json({ error: delErr.message }, { status: 500 })
 
-  // Recompute paid_amount from the remaining payments (more reliable than subtraction)
-  const { data: remaining } = await supabaseAdmin
+  const { data: remaining } = await supabase
     .from('crm_invoice_payments')
     .select('amount')
     .eq('invoice_id', invoiceId)
     .eq('org_id', orgId)
   const newPaid = (remaining ?? []).reduce((sum, p) => sum + Number(p.amount), 0)
 
-  // Update invoice; downgrade 'paid' → 'sent' if it's no longer fully paid
-  const { data: inv } = await supabaseAdmin
+  const { data: inv } = await supabase
     .from('crm_invoices')
     .select('total, status, due_date')
     .eq('id', invoiceId)
@@ -56,7 +50,6 @@ export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ 
     paid_amount: newPaid,
     updated_at: new Date().toISOString(),
   }
-  // Derive status from the new ledger sum
   if (inv && !['cancelled', 'void'].includes(inv.status)) {
     if (newPaid >= total - 0.01) {
       updates.status = 'paid'
@@ -68,7 +61,7 @@ export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ 
       updates.paid_date = null
     }
   }
-  await supabaseAdmin.from('crm_invoices').update(updates).eq('id', invoiceId).eq('org_id', orgId)
+  await supabase.from('crm_invoices').update(updates).eq('id', invoiceId).eq('org_id', orgId)
 
   logAudit({
     org_id: orgId,

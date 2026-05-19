@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { requireSession } from '@/lib/session'
-import { supabaseAdmin } from '@/lib/supabase'
+import { requireWriteAccess } from '@/lib/session'
 import { checkMutationLimit } from '@/lib/rate-limit'
 import { logAudit } from '@/lib/audit'
 
@@ -8,9 +7,9 @@ export async function PATCH(
   req: NextRequest,
   { params }: { params: Promise<{ userId: string }> }
 ) {
-  const { session, error } = await requireSession()
+  const { session, supabase, error } = await requireWriteAccess()
   if (error) return error
-  const { orgId, id: actorId, role: actorRole } = session!.user
+  const { orgId, id: actorId, role: actorRole } = session.user
 
   const limit = await checkMutationLimit(orgId)
   if (!limit.success) return NextResponse.json({ error: 'Rate limit exceeded.' }, { status: 429 })
@@ -20,13 +19,12 @@ export async function PATCH(
 
   const isSelf = userId === actorId
 
-  // Self-update: only full_name and avatar_url allowed
   if (isSelf) {
     const selfAllowed = ['full_name', 'avatar_url']
     const updates = Object.fromEntries(Object.entries(body).filter(([k]) => selfAllowed.includes(k)))
     if (!Object.keys(updates).length) return NextResponse.json({ error: 'No valid fields.' }, { status: 400 })
 
-    const { data, error: dbError } = await supabaseAdmin
+    const { data, error: dbError } = await supabase
       .from('crm_users')
       .update({ ...updates, updated_at: new Date().toISOString() })
       .eq('id', userId)
@@ -43,12 +41,10 @@ export async function PATCH(
     return NextResponse.json({ error: 'Insufficient permissions.' }, { status: 403 })
   }
 
-  // Prevent self-demotion or self-deactivation via admin path (belt-and-suspenders)
   if (body.role || body.is_active === false) {
     if (userId === actorId) return NextResponse.json({ error: 'Cannot modify your own role or status.' }, { status: 400 })
   }
 
-  // Prevent non-super-admin from creating super_admin
   if (body.role === 'super_admin' && actorRole !== 'super_admin') {
     return NextResponse.json({ error: 'Only super admins can assign super_admin role.' }, { status: 403 })
   }
@@ -57,7 +53,7 @@ export async function PATCH(
   const updates = Object.fromEntries(Object.entries(body).filter(([k]) => allowed.includes(k)))
   if (!Object.keys(updates).length) return NextResponse.json({ error: 'No valid fields.' }, { status: 400 })
 
-  const { data, error: dbError } = await supabaseAdmin
+  const { data, error: dbError } = await supabase
     .from('crm_users')
     .update({ ...updates, updated_at: new Date().toISOString() })
     .eq('id', userId)
@@ -75,9 +71,9 @@ export async function DELETE(
   _req: NextRequest,
   { params }: { params: Promise<{ userId: string }> }
 ) {
-  const { session, error } = await requireSession()
+  const { session, supabase, error } = await requireWriteAccess()
   if (error) return error
-  const { orgId, id: actorId, role: actorRole } = session!.user
+  const { orgId, id: actorId, role: actorRole } = session.user
 
   const limit = await checkMutationLimit(orgId)
   if (!limit.success) return NextResponse.json({ error: 'Rate limit exceeded.' }, { status: 429 })
@@ -92,8 +88,7 @@ export async function DELETE(
     return NextResponse.json({ error: 'You cannot delete your own account.' }, { status: 400 })
   }
 
-  // Confirm target exists in same org and capture details for audit + last-super-admin guard
-  const { data: target } = await supabaseAdmin
+  const { data: target } = await supabase
     .from('crm_users')
     .select('id, email, full_name, role')
     .eq('id', userId)
@@ -102,9 +97,8 @@ export async function DELETE(
 
   if (!target) return NextResponse.json({ error: 'User not found.' }, { status: 404 })
 
-  // Block deleting the last super_admin in the org (safety net)
   if (target.role === 'super_admin') {
-    const { count } = await supabaseAdmin
+    const { count } = await supabase
       .from('crm_users')
       .select('id', { count: 'exact', head: true })
       .eq('org_id', orgId)
@@ -114,7 +108,7 @@ export async function DELETE(
     }
   }
 
-  const { error: dbError } = await supabaseAdmin
+  const { error: dbError } = await supabase
     .from('crm_users')
     .delete()
     .eq('id', userId)

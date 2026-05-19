@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { requireSession } from '@/lib/session'
-import { supabaseAdmin } from '@/lib/supabase'
+import { getTenantClient } from '@/lib/session'
 import { checkReadLimit } from '@/lib/rate-limit'
 
 type Comm = {
@@ -19,9 +18,9 @@ type Comm = {
 }
 
 export async function GET(req: NextRequest) {
-  const { session, error } = await requireSession()
+  const { session, supabase, error } = await getTenantClient()
   if (error) return error
-  const { orgId } = session!.user
+  const { orgId } = session.user
   const limit = await checkReadLimit(orgId)
   if (!limit.success) return NextResponse.json({ error: 'Rate limit exceeded.' }, { status: 429 })
 
@@ -33,9 +32,8 @@ export async function GET(req: NextRequest) {
 
   const collected: Comm[] = []
 
-  // 1. Activities (calls, meetings, emails, tasks)
   if (!channel || ['call', 'meeting', 'email', 'task'].includes(channel)) {
-    let q = supabaseAdmin
+    let q = supabase
       .from('crm_activities')
       .select(`id, activity_type, subject, description, status, completed_at, scheduled_at, contact_id, account_id, assigned_to, crm_contacts!contact_id(full_name), crm_users!assigned_to(full_name)`)
       .eq('org_id', orgId)
@@ -65,9 +63,8 @@ export async function GET(req: NextRequest) {
     }
   }
 
-  // 2. Notes
   if (!channel || channel === 'note') {
-    let q = supabaseAdmin
+    let q = supabase
       .from('crm_notes')
       .select(`id, content, related_to_type, related_to_id, created_by, created_at, crm_users!created_by(full_name)`)
       .eq('org_id', orgId)
@@ -94,9 +91,8 @@ export async function GET(req: NextRequest) {
     }
   }
 
-  // 3. Campaigns sent (broadcast emails / WhatsApp)
   if ((!channel || channel === 'campaign') && !contactId && !accountId) {
-    const { data } = await supabaseAdmin
+    const { data } = await supabase
       .from('crm_campaigns')
       .select('id, name, type, subject, body, status, sent_at, recipient_count, created_at')
       .eq('org_id', orgId)

@@ -1,19 +1,18 @@
 import { NextResponse } from 'next/server'
-import { requireSession } from '@/lib/session'
-import { supabaseAdmin } from '@/lib/supabase'
+import { getTenantClient } from '@/lib/session'
 
 export async function GET() {
-  const { session, error } = await requireSession()
+  const { session, supabase, error } = await getTenantClient()
   if (error) return error
-  const { orgId } = session!.user
+  const { orgId } = session.user
 
-  const { data: stages } = await supabaseAdmin
+  const { data: stages } = await supabase
     .from('crm_pipeline_stages')
     .select('id, name, color, position, is_won, is_lost')
     .eq('org_id', orgId)
     .order('position')
 
-  const { data: deals } = await supabaseAdmin
+  const { data: deals } = await supabase
     .from('crm_deals')
     .select('stage_id, deal_value, deal_status')
     .eq('org_id', orgId)
