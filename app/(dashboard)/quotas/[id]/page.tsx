@@ -15,7 +15,7 @@ type Quota = {
 }
 
 const fmtNum = (n: number, c = 'INR', metric = 'revenue') => {
-  if (metric === 'revenue') return new Intl.NumberFormat('en-IN', { style: 'currency', currency: c, maximumFractionDigits: 0 }).format(n)
+  if (metric === 'revenue') return new Intl.NumberFormat('en-IN', { style: 'currency', currency: c, minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(n)
   return new Intl.NumberFormat('en-IN').format(n)
 }
 const fmtDate = (s: string) => new Date(s).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })

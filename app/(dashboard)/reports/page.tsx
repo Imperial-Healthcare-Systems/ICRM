@@ -21,7 +21,7 @@ type StageData = { name: string; count: number; value: number; color: string }
 type LeadStatus = { name: string; value: number }
 
 const fmt = (n: number) =>
-  new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(n)
+  new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(n)
 
 function KpiCard({ label, value, sub, icon, positive }: { label: string; value: string; sub?: string; icon: React.ReactNode; positive?: boolean }) {
   return (

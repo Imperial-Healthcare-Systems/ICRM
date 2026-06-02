@@ -13,7 +13,7 @@ type Product = {
   currency: string; tax_pct: number; category: string | null; unit: string; is_active: boolean
 }
 
-const fmt = (n: number, c = 'INR') => new Intl.NumberFormat('en-IN', { style: 'currency', currency: c, maximumFractionDigits: 0 }).format(n)
+const fmt = (n: number, c = 'INR') => new Intl.NumberFormat('en-IN', { style: 'currency', currency: c, minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(n)
 
 export default function ProductsPage() {
   const [products, setProducts] = useState<Product[]>([])

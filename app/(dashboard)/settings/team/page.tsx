@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { useSession } from 'next-auth/react'
+import { useSession } from '@/lib/use-session'
 import { UserPlus, Loader2, CheckCircle, XCircle, Trash2 } from 'lucide-react'
 import PageHeader from '@/components/PageHeader'
 import Avatar from '@/components/ui/Avatar'

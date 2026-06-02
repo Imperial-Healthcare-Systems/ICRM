@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase'
+import { toDecimal, applyTax, toCurrencyString } from '@/lib/money'
 
 function verifyCron(req: NextRequest) {
   const secret = process.env.CRON_SECRET
@@ -30,9 +31,15 @@ export async function GET(req: NextRequest) {
 
     const { data: invNum } = await supabaseAdmin.rpc('next_doc_number', { p_org_id: sub.org_id, p_type: 'invoice', p_prefix: 'INV' })
     const dueDate = new Date(); dueDate.setDate(dueDate.getDate() + Number(sub.payment_terms_days ?? 7))
-    const subtotal = Number(sub.amount)
-    const taxPct = Number(sub.tax_pct ?? 0)
-    const total = Math.round(subtotal * (1 + taxPct / 100))
+
+    // Precision: full-precision compute, round once at the end. Replaces
+    // the prior `Math.round(subtotal * (1 + taxPct/100))` which silently
+    // discarded paise on every recurring invoice.
+    const subtotal = toDecimal(sub.amount)
+    const taxPct = toDecimal(sub.tax_pct ?? 0)
+    const { tax, total } = applyTax(subtotal, taxPct)
+    const subtotalStr = toCurrencyString(subtotal)
+    const totalStr = toCurrencyString(total)
 
     const { error: invErr } = await supabaseAdmin.from('crm_invoices').insert({
       org_id: sub.org_id,
@@ -42,8 +49,10 @@ export async function GET(req: NextRequest) {
       status: 'sent',
       issue_date: today,
       due_date: dueDate.toISOString().split('T')[0],
-      items: [{ description: `${sub.name} (${sub.subscription_number})`, qty: 1, rate: subtotal, total: subtotal }],
-      subtotal, tax_pct: taxPct, total,
+      items: [{ description: `${sub.name} (${sub.subscription_number})`, qty: 1, rate: subtotalStr, total: subtotalStr }],
+      subtotal: subtotalStr,
+      tax_pct: taxPct.toNumber(),
+      total: totalStr,
       currency: sub.currency,
       notes: `Recurring invoice from subscription ${sub.subscription_number}`,
     })

@@ -47,7 +47,7 @@ const TASK_COLUMNS = [
 ] as const
 
 const fmt = (n: number | null, c = 'INR') =>
-  n == null ? '—' : new Intl.NumberFormat('en-IN', { style: 'currency', currency: c, maximumFractionDigits: 0 }).format(n)
+  n == null ? '—' : new Intl.NumberFormat('en-IN', { style: 'currency', currency: c, minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(n)
 const fmtDate = (s: string | null) => s ? new Date(s).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : '—'
 const fmtMins = (m: number | null) => {
   if (!m) return '0m'

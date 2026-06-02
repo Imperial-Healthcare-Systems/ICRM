@@ -20,7 +20,7 @@
  *   - `forceShow={true}`: always shown (used on auth pages where the
  *     user has no session yet and the spec mandates a visible watermark).
  */
-import { useSession } from 'next-auth/react'
+import { useSession } from '@/lib/use-session'
 import { WATERMARK_LINES } from '@/lib/branding-constants'
 
 type Props = {

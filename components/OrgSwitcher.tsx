@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
-import { useSession } from 'next-auth/react'
+import { useSession } from '@/lib/use-session'
 import { Check, ChevronsUpDown, Loader2 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import clsx from 'clsx'

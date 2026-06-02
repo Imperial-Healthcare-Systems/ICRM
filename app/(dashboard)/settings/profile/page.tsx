@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { useSession } from 'next-auth/react'
+import { useSession } from '@/lib/use-session'
 import { User, Save, Loader2, Palette } from 'lucide-react'
 import toast from 'react-hot-toast'
 import PageHeader from '@/components/PageHeader'

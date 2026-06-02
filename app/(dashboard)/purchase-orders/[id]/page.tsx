@@ -22,7 +22,7 @@ const STATUS_COLORS: Record<string, string> = {
   received: 'bg-emerald-500/15 text-emerald-400', cancelled: 'bg-red-500/15 text-red-400',
 }
 
-const fmt = (n: number, c = 'INR') => new Intl.NumberFormat('en-IN', { style: 'currency', currency: c, maximumFractionDigits: 0 }).format(n ?? 0)
+const fmt = (n: number, c = 'INR') => new Intl.NumberFormat('en-IN', { style: 'currency', currency: c, minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(n ?? 0)
 
 export default function Page({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params)

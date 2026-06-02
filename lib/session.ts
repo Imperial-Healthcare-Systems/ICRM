@@ -18,7 +18,7 @@
  *     sweeper closes stale rows; requireSession() reacts to that closure).
  */
 import { NextResponse } from 'next/server'
-import type { Session } from 'next-auth'
+import type { Session } from '@/types/session'
 import type { SupabaseClient } from '@supabase/supabase-js'
 
 import { getServerSupabase } from './supabase-server'

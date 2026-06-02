@@ -58,6 +58,56 @@ export async function POST(req: NextRequest) {
   const { data: numData } = await supabase
     .rpc('next_doc_number', { p_org_id: orgId, p_type: docType, p_prefix: docPrefix })
 
+  // ── Snapshot buyer block from crm_accounts at issue time ──────────
+  // Same legal-record rationale as invoices: a later edit to the
+  // account must not retroactively rewrite this quotation.
+  let buyerSnapshot: {
+    buyer_name: string | null
+    buyer_gstin: string | null
+    buyer_address: Record<string, unknown> | null
+    buyer_state: string | null
+    buyer_state_code: string | null
+  } = {
+    buyer_name: null, buyer_gstin: null, buyer_address: null,
+    buyer_state: null, buyer_state_code: null,
+  }
+  if (body.account_id) {
+    const { data: acct } = await supabase
+      .from('crm_accounts')
+      .select(`
+        name, gstin,
+        billing_address_line1, billing_address_line2,
+        billing_city, billing_state, billing_state_code,
+        billing_pincode, billing_country
+      `)
+      .eq('id', body.account_id)
+      .eq('org_id', orgId)
+      .maybeSingle() as { data: {
+        name: string; gstin: string | null;
+        billing_address_line1: string | null; billing_address_line2: string | null;
+        billing_city: string | null; billing_state: string | null;
+        billing_state_code: string | null; billing_pincode: string | null;
+        billing_country: string | null;
+      } | null }
+
+    if (acct) {
+      buyerSnapshot = {
+        buyer_name:       acct.name,
+        buyer_gstin:      acct.gstin,
+        buyer_state:      acct.billing_state,
+        buyer_state_code: acct.billing_state_code,
+        buyer_address: {
+          line1:   acct.billing_address_line1,
+          line2:   acct.billing_address_line2,
+          city:    acct.billing_city,
+          state:   acct.billing_state,
+          pincode: acct.billing_pincode,
+          country: acct.billing_country,
+        },
+      }
+    }
+  }
+
   const { data, error: dbError } = await supabase
     .from('crm_quotations')
     .insert({
@@ -66,6 +116,7 @@ export async function POST(req: NextRequest) {
       quote_number: numData ?? `${docPrefix}-${Date.now()}`,
       created_by: actorId,
       status: body.status ?? 'draft',
+      ...buyerSnapshot,
     })
     .select('id, quote_number')
     .single()

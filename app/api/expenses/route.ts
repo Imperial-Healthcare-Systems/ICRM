@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getTenantClient, requireWriteAccess } from '@/lib/session'
 import { checkReadLimit, checkMutationLimit } from '@/lib/rate-limit'
 import { logAudit } from '@/lib/audit'
+import { toDecimal, toCurrencyString } from '@/lib/money'
 
 const CATEGORIES = ['travel', 'meals', 'accommodation', 'supplies', 'software', 'marketing', 'training', 'client_entertainment', 'general', 'other']
 
@@ -44,8 +45,9 @@ export async function POST(req: NextRequest) {
   if (!limit.success) return NextResponse.json({ error: 'Rate limit exceeded.' }, { status: 429 })
 
   const body = await req.json()
-  const amount = Number(body.amount)
-  if (!Number.isFinite(amount) || amount <= 0) return NextResponse.json({ error: 'Amount must be positive.' }, { status: 400 })
+  // Precision: parse as Decimal — float-free.
+  const amount = toDecimal(body.amount)
+  if (!amount.isFinite() || amount.lte(0)) return NextResponse.json({ error: 'Amount must be positive.' }, { status: 400 })
   if (!body.description?.trim()) return NextResponse.json({ error: 'Description is required.' }, { status: 400 })
   if (!body.expense_date) return NextResponse.json({ error: 'Date is required.' }, { status: 400 })
   if (body.category && !CATEGORIES.includes(body.category))
@@ -63,7 +65,7 @@ export async function POST(req: NextRequest) {
     project_id: body.project_id || null,
     account_id: body.account_id || null,
     category: body.category ?? 'general',
-    amount,
+    amount: toCurrencyString(amount),
     currency: body.currency ?? 'INR',
     expense_date: body.expense_date,
     description: body.description.trim(),

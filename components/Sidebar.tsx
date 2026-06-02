@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { signOut } from 'next-auth/react'
+import { getBrowserSupabase } from '@/lib/supabase-browser'
 import {
   LayoutDashboard, UserCircle, Building2, TrendingUp,
   CalendarCheck, Receipt,
@@ -282,7 +282,10 @@ export default function Sidebar({ userName, orgName, planTier }: SidebarProps) {
                 Settings
               </Link>
               <button
-                onClick={() => signOut({ callbackUrl: '/login' })}
+                onClick={async () => {
+                  await getBrowserSupabase().auth.signOut()
+                  window.location.href = '/login'
+                }}
                 className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-red-400 hover:text-red-300 hover:bg-red-500/10 text-xs font-medium transition"
               >
                 <LogOut className="w-3.5 h-3.5" />

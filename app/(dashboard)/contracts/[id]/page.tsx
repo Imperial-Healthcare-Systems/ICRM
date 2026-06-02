@@ -20,7 +20,7 @@ const STATUS_COLORS: Record<string, string> = {
   renewed: 'bg-blue-500/15 text-blue-400',
 }
 
-const fmt = (n: number) => new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(n ?? 0)
+const fmt = (n: number) => new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(n ?? 0)
 
 export default function Page({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params)

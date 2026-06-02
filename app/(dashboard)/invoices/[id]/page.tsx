@@ -10,7 +10,7 @@ import {
 import clsx from 'clsx'
 import Select from '@/components/ui/Select'
 
-type LineItem = { description: string; qty: number; rate: number; total: number }
+type LineItem = { description: string; hsn?: string | null; qty: number; rate: number; total: number }
 type Invoice = {
   id: string; invoice_number: string; status: string
   issue_date: string; due_date: string | null; paid_date: string | null
@@ -19,6 +19,19 @@ type Invoice = {
   account_id: string | null
   crm_accounts: { name: string } | null
   created_at: string
+  // GST snapshot + tax split (M121)
+  buyer_name: string | null
+  buyer_gstin: string | null
+  buyer_state: string | null
+  buyer_state_code: string | null
+  buyer_address: {
+    line1?: string | null; line2?: string | null; city?: string | null;
+    state?: string | null; pincode?: string | null; country?: string | null;
+  } | null
+  place_of_supply: string | null
+  cgst_amount: number
+  sgst_amount: number
+  igst_amount: number
 }
 
 type Payment = {
@@ -49,7 +62,7 @@ const PAYMENT_METHODS = [
   { value: 'other', label: 'Other' },
 ]
 
-const fmt = (n: number, c = 'INR') => new Intl.NumberFormat('en-IN', { style: 'currency', currency: c, maximumFractionDigits: 0 }).format(n ?? 0)
+const fmt = (n: number, c = 'INR') => new Intl.NumberFormat('en-IN', { style: 'currency', currency: c, minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(n ?? 0)
 const fmtDate = (s: string | null) => s ? new Date(s).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : '—'
 
 export default function InvoiceDetailPage({ params }: { params: Promise<{ id: string }> }) {
@@ -199,10 +212,32 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
               </tbody>
               <tfoot className="bg-white/3 border-t border-white/5">
                 <tr>
-                  <td colSpan={3} className="px-4 py-2 text-right text-slate-400 text-xs">Subtotal</td>
+                  <td colSpan={3} className="px-4 py-2 text-right text-slate-400 text-xs">Taxable Subtotal</td>
                   <td className="px-4 py-2 text-right text-slate-300 tabular-nums">{fmt(invoice.subtotal, invoice.currency)}</td>
                 </tr>
-                {invoice.tax_pct > 0 && (
+                {/* GST split: CGST+SGST (intra-state) OR IGST (inter-state), per snapshot on the invoice. */}
+                {Number(invoice.cgst_amount ?? 0) > 0 && (
+                  <>
+                    <tr>
+                      <td colSpan={3} className="px-4 py-2 text-right text-slate-400 text-xs">CGST ({(invoice.tax_pct / 2).toFixed(2)}%)</td>
+                      <td className="px-4 py-2 text-right text-slate-300 tabular-nums">{fmt(Number(invoice.cgst_amount), invoice.currency)}</td>
+                    </tr>
+                    <tr>
+                      <td colSpan={3} className="px-4 py-2 text-right text-slate-400 text-xs">SGST ({(invoice.tax_pct / 2).toFixed(2)}%)</td>
+                      <td className="px-4 py-2 text-right text-slate-300 tabular-nums">{fmt(Number(invoice.sgst_amount), invoice.currency)}</td>
+                    </tr>
+                  </>
+                )}
+                {Number(invoice.igst_amount ?? 0) > 0 && (
+                  <tr>
+                    <td colSpan={3} className="px-4 py-2 text-right text-slate-400 text-xs">IGST ({invoice.tax_pct}%)</td>
+                    <td className="px-4 py-2 text-right text-slate-300 tabular-nums">{fmt(Number(invoice.igst_amount), invoice.currency)}</td>
+                  </tr>
+                )}
+                {/* Fallback for historical pre-M121 invoices that don't have a split. */}
+                {invoice.tax_pct > 0
+                  && Number(invoice.cgst_amount ?? 0) === 0
+                  && Number(invoice.igst_amount ?? 0) === 0 && (
                   <tr>
                     <td colSpan={3} className="px-4 py-2 text-right text-slate-400 text-xs">Tax ({invoice.tax_pct}%)</td>
                     <td className="px-4 py-2 text-right text-slate-300 tabular-nums">{fmt(total - invoice.subtotal, invoice.currency)}</td>
@@ -497,7 +532,7 @@ function RecordPaymentModal({
             </h2>
             <p className="text-slate-500 text-xs mt-0.5">
               Outstanding: <span className={clsx('font-semibold', outstanding > 0 ? 'text-[#F47920]' : 'text-emerald-400')}>
-                {new Intl.NumberFormat('en-IN', { style: 'currency', currency, maximumFractionDigits: 0 }).format(outstanding)}
+                {new Intl.NumberFormat('en-IN', { style: 'currency', currency, minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(outstanding)}
               </span>
             </p>
           </div>

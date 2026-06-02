@@ -3,6 +3,7 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 import { requireWriteAccess } from '@/lib/session'
 import { checkMutationLimit } from '@/lib/rate-limit'
 import { logAudit } from '@/lib/audit'
+import { toDecimal, applyTax, toCurrencyString } from '@/lib/money'
 
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { session, supabase, error } = await requireWriteAccess()
@@ -51,9 +52,14 @@ async function generateInvoice(supabase: SupabaseClient, orgId: string, actorId:
   const { data: invNum } = await supabase.rpc('next_doc_number', { p_org_id: orgId, p_type: 'invoice', p_prefix: 'INV' })
   const dueDate = new Date(now); dueDate.setDate(dueDate.getDate() + Number(sub.payment_terms_days ?? 7))
 
-  const subtotal = Number(sub.amount)
-  const taxPct = Number(sub.tax_pct ?? 0)
-  const total = Math.round(subtotal * (1 + taxPct / 100))
+  // Precision: full-precision compute, single rounding at storage.
+  // Replaces the prior `Math.round(subtotal * (1 + taxPct/100))` which
+  // silently discarded paise on every manually-generated invoice.
+  const subtotalD = toDecimal(sub.amount as string | number | null)
+  const taxPctD = toDecimal((sub.tax_pct ?? 0) as string | number)
+  const { total: totalD } = applyTax(subtotalD, taxPctD)
+  const subtotalStr = toCurrencyString(subtotalD)
+  const totalStr = toCurrencyString(totalD)
 
   const { data: invoice, error: invErr } = await supabase.from('crm_invoices').insert({
     org_id: orgId,
@@ -63,10 +69,10 @@ async function generateInvoice(supabase: SupabaseClient, orgId: string, actorId:
     status: 'sent',
     issue_date: now.toISOString().split('T')[0],
     due_date: dueDate.toISOString().split('T')[0],
-    items: [{ description: `${sub.name} (${sub.subscription_number})`, qty: 1, rate: subtotal, total: subtotal }],
-    subtotal,
-    tax_pct: taxPct,
-    total,
+    items: [{ description: `${sub.name} (${sub.subscription_number})`, qty: 1, rate: subtotalStr, total: subtotalStr }],
+    subtotal: subtotalStr,
+    tax_pct: taxPctD.toNumber(),
+    total: totalStr,
     currency: sub.currency,
     notes: `Recurring invoice from subscription ${sub.subscription_number}`,
     created_by: actorId,

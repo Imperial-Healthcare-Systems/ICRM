@@ -42,7 +42,7 @@ export default function InvoicesPage() {
   useEffect(() => { fetchInvoices() }, [fetchInvoices])
 
   const fmt = (n: number, currency = 'INR') =>
-    new Intl.NumberFormat('en-IN', { style: 'currency', currency, maximumFractionDigits: 0 }).format(n)
+    new Intl.NumberFormat('en-IN', { style: 'currency', currency, minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(n)
 
   const isOverdue = (inv: Invoice) =>
     inv.due_date && new Date(inv.due_date) < new Date() && !['paid','cancelled','void'].includes(inv.status)

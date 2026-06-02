@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { useSession } from 'next-auth/react'
+import { useSession } from '@/lib/use-session'
 
 export default function ImperialBanner() {
   const { data: session } = useSession()

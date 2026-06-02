@@ -1,4 +1,84 @@
+/**
+ * Indian GST-compliant Tax Invoice PDF — A4, single template.
+ *
+ * Replaces the prior "INVOICE" cosmetic PDF. Renders every element a
+ * tax invoice must carry under CGST Rule 46:
+ *   - "TAX INVOICE" heading
+ *   - Seller name, address, GSTIN, CIN, contact
+ *   - Buyer name, address, GSTIN, state + state code
+ *   - Invoice number, date, due date, place of supply
+ *   - Line items with HSN/SAC, qty, rate, taxable value
+ *   - Tax columns adapt: CGST+SGST (intra-state) OR IGST (inter-state)
+ *   - Taxable subtotal, tax totals, grand total
+ *   - Amount in words (Indian numbering)
+ *   - "Computer-generated invoice" line
+ *   - Spec-compliant watermark from lib/branding-constants
+ *
+ * Buyer/seller details come from snapshot columns on crm_invoices set
+ * at issue time (M121). For pre-snapshot historical invoices, falls
+ * back to a live join on crm_accounts so old PDFs still render.
+ */
 import { jsPDF } from 'jspdf'
+import {
+  formatINRPlain, amountInWords, toDecimal, multiply,
+  determineGstSplit, stateCodeFromGstin,
+  type MoneyInput,
+} from '@/lib/money'
+import { WATERMARK_LINES, LEGAL_SELLER_LINE } from '@/lib/branding-constants'
+
+export type InvoiceLineItem = {
+  description: string
+  hsn?: string | null         // HSN (goods) / SAC (services) code
+  qty: number | string
+  rate: number | string
+  /** Pre-tax line value (qty × rate − line discount). Computed by normalizeLineItems if missing. */
+  taxable?: number | string
+  /** Legacy alias for `taxable` — written by the existing LineItemsEditor form. */
+  amount?: number | string
+  /** Legacy alias for `taxable` — written by older callers. */
+  total?: number | string
+  /** Per-line discount percentage (0-100). Optional. */
+  discount_pct?: number | string
+}
+
+/**
+ * Format a money value for inclusion in the PDF. jsPDF's Standard 14
+ * fonts (Helvetica/Times/Courier) do NOT contain the Unicode Rupee sign
+ * U+20B9 (₹) — the renderer substitutes ¹ (U+00B9, same low byte). To
+ * keep PDFs legible without embedding a custom font, prefix every
+ * currency value with the ASCII string "Rs." instead.
+ *
+ * THIS HELPER IS PDF-ONLY. The web UI, emails, and API responses keep
+ * using `formatINR()` from lib/money.ts which renders the proper ₹.
+ */
+function formatPDFCurrency(value: MoneyInput): string {
+  return `Rs.${formatINRPlain(value)}`
+}
+
+/**
+ * Normalize the line items array so every item has an explicit
+ * `taxable` value before any PDF rendering reads it.
+ *
+ * ALWAYS computes from primitives:
+ *   taxable = (qty × rate) − (qty × rate × discount_pct / 100)
+ *
+ * Pre-set `taxable`/`amount`/`total` fields on the input are IGNORED.
+ * This makes the PDF immune to upstream callers that may write
+ * inconsistent `amount` values (e.g. amount = rate instead of qty×rate).
+ * Cost is negligible — one Decimal multiplication per row.
+ *
+ * Returns NEW objects; does not mutate the input.
+ */
+export function normalizeLineItems(items: InvoiceLineItem[]): InvoiceLineItem[] {
+  return items.map(li => {
+    const base = multiply(li.qty, li.rate)
+    const disc = li.discount_pct
+      ? base.times(toDecimal(li.discount_pct).dividedBy(100))
+      : toDecimal(0)
+    const taxable = base.minus(disc).toFixed(2)
+    return { ...li, taxable }
+  })
+}
 
 export type InvoicePdfData = {
   invoice_number: string
@@ -6,245 +86,680 @@ export type InvoicePdfData = {
   issue_date: string
   due_date: string | null
   paid_date: string | null
-  items: Array<{ description: string; qty: number; rate: number; total: number }>
-  subtotal: number
-  tax_pct: number
-  total: number
-  paid_amount: number
+  items: InvoiceLineItem[]
+  subtotal: number | string
+  tax_pct: number | string
+  total: number | string
+  paid_amount: number | string
   currency: string
   notes: string | null
   terms: string | null
-  account: { name: string; email?: string | null; phone?: string | null; billing_address?: Record<string, unknown> | null } | null
-  organisation: { name: string; gstin?: string | null; pan?: string | null; phone?: string | null; website?: string | null; address?: string | null; logo_url?: string | null }
+  // Tax split (M121)
+  cgst_amount: number | string
+  sgst_amount: number | string
+  igst_amount: number | string
+  // Buyer snapshot (M121) — falls back to account live-join for historical rows
+  buyer_name: string | null
+  buyer_gstin: string | null
+  buyer_address: {
+    line1?: string | null; line2?: string | null;
+    city?: string | null; state?: string | null;
+    pincode?: string | null; country?: string | null;
+  } | null
+  buyer_state: string | null
+  buyer_state_code: string | null
+  // Seller context
+  seller_state_code: string | null
+  place_of_supply: string | null
+  organisation: {
+    name: string
+    legal_name?: string | null   // overrides org.name on the PDF if set
+    gstin?: string | null
+    cin?: string | null
+    pan?: string | null
+    phone?: string | null
+    email?: string | null
+    website?: string | null
+    address?: string | null
+    state?: string | null
+    state_code?: string | null
+    logo_url?: string | null
+  }
+  // Branding hint — if true, the watermark line is suppressed (white-label)
+  hide_watermark?: boolean
+  // Optional account fallback for old invoices without snapshot
+  account_fallback?: { name: string; gstin?: string | null; billing_address?: Record<string, unknown> | null } | null
 }
 
-const fmt = (n: number, currency = 'INR') =>
-  new Intl.NumberFormat('en-IN', { style: 'currency', currency, maximumFractionDigits: 0 }).format(n ?? 0)
+// ── Brand palette (matches IMPERIAL_TENANT_SPEC §17 colour reference) ──
+const NAVY:   [number, number, number] = [13, 42, 74]    // #0D2A4A
+const BLUE:   [number, number, number] = [21, 101, 192]  // #1565C0
+const ORANGE: [number, number, number] = [243, 140, 20]  // #F38C14
+const SLATE_900: [number, number, number] = [15, 23, 42]
+const SLATE_600: [number, number, number] = [71, 85, 105]
+const SLATE_400: [number, number, number] = [148, 163, 184]
+const SLATE_200: [number, number, number] = [226, 232, 240]
+const WHITE: [number, number, number] = [255, 255, 255]
+const MUTED_GRAY: [number, number, number] = [107, 114, 128] // #6B7280 — for inline secondary text in the FROM block
 
 const fmtDate = (s: string | null | undefined) =>
-  s ? new Date(s).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : '—'
+  s ? new Date(s).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : '—'
 
-const ORANGE: [number, number, number] = [244, 121, 32]
-const NAVY: [number, number, number] = [13, 27, 46]
-const SLATE_400: [number, number, number] = [148, 163, 184]
-const SLATE_700: [number, number, number] = [51, 65, 85]
-const EMERALD: [number, number, number] = [16, 185, 129]
-const RED: [number, number, number] = [239, 68, 68]
+function joinNonEmpty(parts: Array<string | null | undefined>, sep = ', '): string {
+  return parts.filter(p => p && String(p).trim().length > 0).join(sep)
+}
 
-/** Generate an invoice PDF as a Uint8Array. Works in Node and browser. */
+/** Compose a multi-line address from the snapshot blob. */
+function formatBuyerAddress(addr: InvoicePdfData['buyer_address']): string[] {
+  if (!addr) return []
+  const lines: string[] = []
+  if (addr.line1) lines.push(String(addr.line1))
+  if (addr.line2) lines.push(String(addr.line2))
+  const cityLine = joinNonEmpty([addr.city, joinNonEmpty([addr.state, addr.pincode], ' ')])
+  if (cityLine) lines.push(cityLine)
+  if (addr.country) lines.push(String(addr.country))
+  return lines
+}
+
+// ─────────────────────────────────────────────────────────────────────
+//  Main builder
+// ─────────────────────────────────────────────────────────────────────
+
 export function buildInvoicePdf(data: InvoicePdfData): Uint8Array {
+  // Defensive normalisation — every line item must have an explicit
+  // `taxable` field before the render loop reads it. Idempotent.
+  const items = normalizeLineItems(data.items ?? [])
+
   const doc = new jsPDF({ unit: 'pt', format: 'a4' })
-  const pageWidth = doc.internal.pageSize.getWidth()
-  const margin = 40
-  let y = margin
+  const PAGE_W = doc.internal.pageSize.getWidth()    // 595
+  const PAGE_H = doc.internal.pageSize.getHeight()   // 842
+  const MARGIN_X = 36
+  const CONTENT_W = PAGE_W - MARGIN_X * 2
 
-  /* Header band */
+  // ── Header band ───────────────────────────────────────────────────
   doc.setFillColor(...NAVY)
-  doc.rect(0, 0, pageWidth, 90, 'F')
+  doc.rect(0, 0, PAGE_W, 100, 'F')
   doc.setFillColor(...ORANGE)
-  doc.rect(0, 86, pageWidth, 4, 'F')
+  doc.rect(0, 100, PAGE_W, 3, 'F')
 
-  doc.setTextColor(255, 255, 255)
+  doc.setTextColor(...WHITE)
   doc.setFont('helvetica', 'bold')
   doc.setFontSize(22)
-  doc.text(data.organisation.name, margin, 38)
+  doc.text('TAX INVOICE', MARGIN_X, 42)
+
   doc.setFont('helvetica', 'normal')
   doc.setFontSize(9)
-  const orgMeta = [data.organisation.address, data.organisation.phone, data.organisation.website].filter(Boolean).join(' · ')
-  if (orgMeta) doc.text(orgMeta, margin, 56)
-  if (data.organisation.gstin) doc.text(`GSTIN: ${data.organisation.gstin}`, margin, 70)
+  const sellerLegalName = data.organisation.legal_name ?? 'Imperial Healthcare Systems Pvt Ltd'
+  doc.text(sellerLegalName, MARGIN_X, 62)
 
-  doc.setFont('helvetica', 'bold')
-  doc.setFontSize(28)
-  doc.text('INVOICE', pageWidth - margin, 38, { align: 'right' })
-  doc.setFont('helvetica', 'normal')
-  doc.setFontSize(10)
-  doc.text(`# ${data.invoice_number}`, pageWidth - margin, 58, { align: 'right' })
-
-  y = 120
-
-  /* Status pill */
-  const statusColor = data.status === 'paid' ? EMERALD : data.status === 'overdue' ? RED : SLATE_400
-  doc.setFillColor(...statusColor)
-  doc.roundedRect(pageWidth - margin - 70, y - 10, 70, 18, 8, 8, 'F')
-  doc.setTextColor(255, 255, 255)
-  doc.setFont('helvetica', 'bold')
-  doc.setFontSize(9)
-  doc.text(data.status.toUpperCase(), pageWidth - margin - 35, y + 2, { align: 'center' })
-  y += 20
-
-  /* Bill-to + dates row */
-  doc.setTextColor(...SLATE_400)
+  // Right side: invoice number, dates, place of supply
+  const rightX = PAGE_W - MARGIN_X
   doc.setFontSize(8)
-  doc.text('BILL TO', margin, y)
-  doc.text('ISSUE DATE', pageWidth / 2 - 20, y)
-  doc.text('DUE DATE', pageWidth - margin - 80, y)
-  y += 12
+  doc.setTextColor(...SLATE_200)
+  doc.text('INVOICE NO.', rightX, 32, { align: 'right' })
+  doc.text('ISSUE DATE',  rightX - 110, 32, { align: 'right' })
+  doc.text('DUE DATE',    rightX - 220, 32, { align: 'right' })
+  doc.setFont('helvetica', 'bold')
+  doc.setFontSize(10)
+  doc.setTextColor(...WHITE)
+  doc.text(data.invoice_number, rightX, 48, { align: 'right' })
+  doc.text(fmtDate(data.issue_date), rightX - 110, 48, { align: 'right' })
+  doc.text(fmtDate(data.due_date), rightX - 220, 48, { align: 'right' })
 
+  doc.setFont('helvetica', 'normal')
+  doc.setFontSize(8)
+  doc.setTextColor(...SLATE_200)
+  doc.text('PLACE OF SUPPLY', rightX, 70, { align: 'right' })
+  doc.setFont('helvetica', 'bold')
+  doc.setFontSize(10)
+  doc.setTextColor(...WHITE)
+  doc.text(data.place_of_supply ?? '—', rightX, 86, { align: 'right' })
+
+  let y = 130
+
+  // ── Seller (FROM) and Buyer (BILL TO) blocks ──────────────────────
+  const colW = (CONTENT_W - 24) / 2
+  const fromX = MARGIN_X
+  const billX = MARGIN_X + colW + 24
+
+  doc.setFont('helvetica', 'bold')
+  doc.setFontSize(8)
+  doc.setTextColor(...SLATE_400)
+  doc.text('FROM',    fromX, y)
+  doc.text('BILL TO', billX, y)
+  y += 14
+
+  // FROM block — brand name + legal-entity disclaimer
+  // Primary line is the brand ("Imperial Tech Innovations"). The legal
+  // entity that issues the invoice stays in the header band + footer;
+  // here we surface the operating brand customers recognise.
+  let fromY = y
   doc.setTextColor(...NAVY)
   doc.setFont('helvetica', 'bold')
   doc.setFontSize(11)
-  doc.text(data.account?.name ?? '—', margin, y)
-  doc.setFont('helvetica', 'normal')
-  doc.setFontSize(10)
-  doc.setTextColor(...SLATE_700)
-  doc.text(fmtDate(data.issue_date), pageWidth / 2 - 20, y)
-  doc.text(fmtDate(data.due_date), pageWidth - margin - 80, y)
+  doc.text('Imperial Tech Innovations', fromX, fromY)
+  fromY += 13
 
-  if (data.account?.email || data.account?.phone) {
-    y += 14
-    doc.setFontSize(9)
-    doc.setTextColor(...SLATE_400)
-    const contactLine = [data.account?.email, data.account?.phone].filter(Boolean).join(' · ')
-    doc.text(contactLine, margin, y)
+  // Brand disclaimer immediately below, in muted gray, regular weight.
+  // 9pt, wraps within the column if needed.
+  doc.setFont('helvetica', 'normal')
+  doc.setFontSize(9)
+  doc.setTextColor(...MUTED_GRAY)
+  const disclaimerLines = doc.splitTextToSize(
+    'A technology brand of Imperial Healthcare Systems Pvt. Ltd.',
+    colW,
+  )
+  doc.text(disclaimerLines, fromX, fromY)
+  fromY += disclaimerLines.length * 11 + 4
+
+  // Restore the FROM block's remaining-content styling (address, GSTIN, CIN, contact).
+  doc.setFont('helvetica', 'normal')
+  doc.setFontSize(9)
+  doc.setTextColor(...SLATE_600)
+  if (data.organisation.address) {
+    const addrLines = doc.splitTextToSize(data.organisation.address, colW)
+    doc.text(addrLines, fromX, fromY)
+    fromY += addrLines.length * 11
+  }
+  if (data.organisation.gstin) {
+    doc.setFont('helvetica', 'bold')
+    doc.setTextColor(...NAVY)
+    doc.text(`GSTIN: ${data.organisation.gstin}`, fromX, fromY)
+    doc.setFont('helvetica', 'normal')
+    doc.setTextColor(...SLATE_600)
+    fromY += 11
+  }
+  if (data.organisation.cin) {
+    doc.text(`CIN: ${data.organisation.cin}`, fromX, fromY)
+    fromY += 11
+  }
+  const sellerContact = joinNonEmpty([data.organisation.phone, data.organisation.email, data.organisation.website], '  ·  ')
+  if (sellerContact) {
+    const contactLines = doc.splitTextToSize(sellerContact, colW)
+    doc.text(contactLines, fromX, fromY)
+    fromY += contactLines.length * 11
   }
 
-  y += 30
-
-  /* Line items table */
-  const colX = { desc: margin, qty: pageWidth - margin - 220, rate: pageWidth - margin - 130, total: pageWidth - margin }
-
-  doc.setFillColor(245, 247, 250)
-  doc.rect(margin, y - 14, pageWidth - 2 * margin, 22, 'F')
-  doc.setFont('helvetica', 'bold')
-  doc.setFontSize(8)
-  doc.setTextColor(...SLATE_400)
-  doc.text('DESCRIPTION', colX.desc + 4, y)
-  doc.text('QTY', colX.qty, y, { align: 'right' })
-  doc.text('RATE', colX.rate, y, { align: 'right' })
-  doc.text('AMOUNT', colX.total - 4, y, { align: 'right' })
-  y += 14
-
-  doc.setFont('helvetica', 'normal')
-  doc.setFontSize(10)
+  // ── BILL TO block — spec-compliant order ──────────────────────────
+  // Line 1: name (bold)
+  // Line 2: address_line1  (or "Address not provided" placeholder)
+  // Line 3: address_line2  (omit if empty)
+  // Line 4: "city, state – pincode"
+  // Line 5: country (omit if India when seller is India too)
+  // Line 6: "GSTIN: …"  (or italic "Not registered (B2C)" if absent)
+  let toY = y
+  const buyerName = data.buyer_name ?? data.account_fallback?.name ?? '—'
   doc.setTextColor(...NAVY)
+  doc.setFont('helvetica', 'bold')
+  doc.setFontSize(11)
+  doc.text(buyerName, billX, toY)
+  toY += 14
+  doc.setFont('helvetica', 'normal')
+  doc.setFontSize(9)
+  doc.setTextColor(...SLATE_600)
 
-  for (const li of data.items) {
-    if (y > 720) {
-      doc.addPage()
-      y = margin
+  // Decide what address content (if any) is available.
+  const addr = data.buyer_address
+  const fb = data.account_fallback?.billing_address as Record<string, unknown> | undefined
+  const line1 = addr?.line1 ?? (fb?.line1 as string | undefined) ?? null
+  const line2 = addr?.line2 ?? (fb?.line2 as string | undefined) ?? null
+  const city =  addr?.city  ?? (fb?.city  as string | undefined) ?? null
+  const state = addr?.state ?? (fb?.state as string | undefined) ?? data.buyer_state ?? null
+  const pincode = addr?.pincode ?? (fb?.pincode as string | undefined) ?? null
+  const country = addr?.country ?? (fb?.country as string | undefined) ?? null
+
+  const anyAddrPart = !!(line1 || line2 || city || state || pincode)
+
+  if (!anyAddrPart) {
+    // Spec: render a placeholder in muted italic when nothing is available.
+    doc.setFont('helvetica', 'italic')
+    doc.setTextColor(...SLATE_400)
+    doc.text('Address not provided', billX, toY)
+    doc.setFont('helvetica', 'normal')
+    doc.setTextColor(...SLATE_600)
+    toY += 11
+  } else {
+    // Line 2 — address_line1 (placeholder if missing but other lines exist)
+    if (line1) {
+      const wrapped = doc.splitTextToSize(String(line1), colW) as string[]
+      for (const w of wrapped) { doc.text(w, billX, toY); toY += 11 }
+    } else {
+      doc.setFont('helvetica', 'italic')
+      doc.setTextColor(...SLATE_400)
+      doc.text('Address line 1 not provided', billX, toY)
+      doc.setFont('helvetica', 'normal')
+      doc.setTextColor(...SLATE_600)
+      toY += 11
     }
-    const wrap = doc.splitTextToSize(li.description ?? '', colX.qty - colX.desc - 8)
-    const lineHeight = Math.max(14, wrap.length * 12)
-    doc.text(wrap, colX.desc + 4, y)
-    doc.text(String(li.qty), colX.qty, y, { align: 'right' })
-    doc.text(fmt(li.rate, data.currency), colX.rate, y, { align: 'right' })
-    doc.text(fmt(li.total, data.currency), colX.total - 4, y, { align: 'right' })
-    y += lineHeight
-    doc.setDrawColor(230, 232, 240)
-    doc.line(margin, y - 4, pageWidth - margin, y - 4)
+    // Line 3 — address_line2 (omit if missing)
+    if (line2) {
+      const wrapped = doc.splitTextToSize(String(line2), colW) as string[]
+      for (const w of wrapped) { doc.text(w, billX, toY); toY += 11 }
+    }
+    // Line 4 — "city, state – pincode" (only emit parts that exist)
+    const stateWithCode = state
+      ? (data.buyer_state_code ? `${state} (${data.buyer_state_code})` : String(state))
+      : null
+    const cityStatePart = joinNonEmpty([city, stateWithCode])
+    const line4 = joinNonEmpty([cityStatePart, pincode], ' – ')
+    if (line4) { doc.text(line4, billX, toY); toY += 11 }
+    // Line 5 — country (omit if India and seller is India)
+    const sellerIsIndia = !data.organisation.state_code || /^[0-3]\d$/.test(data.organisation.state_code)
+    if (country && !(String(country).toLowerCase() === 'india' && sellerIsIndia)) {
+      doc.text(String(country), billX, toY)
+      toY += 11
+    }
+  }
+
+  // Line 6 — GSTIN
+  const buyerGstin = data.buyer_gstin ?? data.account_fallback?.gstin ?? null
+  if (buyerGstin) {
+    doc.setFont('helvetica', 'bold')
+    doc.setTextColor(...NAVY)
+    doc.text(`GSTIN: ${buyerGstin}`, billX, toY)
+    doc.setFont('helvetica', 'normal')
+    doc.setTextColor(...SLATE_600)
+    toY += 11
+  } else {
+    doc.setFont('helvetica', 'italic')
+    doc.setTextColor(...SLATE_400)
+    doc.text('GSTIN: Not registered (B2C)', billX, toY)
+    doc.setFont('helvetica', 'normal')
+    doc.setTextColor(...SLATE_600)
+    toY += 11
+  }
+
+  y = Math.max(fromY, toY) + 16
+
+  // (The tech-brand disclosure now renders inside the FROM block,
+  //  directly below the bold "Imperial Tech Innovations" primary
+  //  name. No floating disclaimer here.)
+
+  // ── Line items table ──────────────────────────────────────────────
+  // Decide which tax columns to render based on the split.
+  let cgstAmount = toDecimal(data.cgst_amount)
+  let sgstAmount = toDecimal(data.sgst_amount)
+  let igstAmount = toDecimal(data.igst_amount)
+  const taxPct = toDecimal(data.tax_pct)
+  const subtotalForSplit = toDecimal(data.subtotal)
+  const totalForSplit = toDecimal(data.total)
+
+  // ── Tax-split derivation fallback (BUG 1 fix) ─────────────────────
+  // Pre-Phase-5 invoices were created before the create route stamped
+  // cgst_amount/sgst_amount/igst_amount on the row. If the stored split
+  // is all zeros but there's tax baked into total - subtotal, derive
+  // the split at render time so the PDF stays compliant.
+  //
+  // Going-forward: new invoices have the split written at insert time,
+  // so this fallback becomes a no-op. Worth a one-off backfill UPDATE
+  // for historical rows once you confirm.
+  if (cgstAmount.eq(0) && sgstAmount.eq(0) && igstAmount.eq(0)
+      && taxPct.gt(0) && totalForSplit.gt(subtotalForSplit)) {
+    // Resolve seller + buyer state codes from whatever's available.
+    const sellerCode = data.seller_state_code
+      ?? data.organisation.state_code
+      ?? stateCodeFromGstin(data.organisation.gstin)
+      ?? null
+    const buyerCode = data.buyer_state_code
+      ?? stateCodeFromGstin(data.buyer_gstin)
+      ?? null
+    const split = determineGstSplit(sellerCode, buyerCode, subtotalForSplit, taxPct)
+    cgstAmount = split.cgst.toDecimalPlaces(2)
+    sgstAmount = split.sgst.toDecimalPlaces(2)
+    igstAmount = split.igst.toDecimalPlaces(2)
+  }
+
+  const isIntraState = cgstAmount.gt(0) && sgstAmount.gt(0)
+  const isInterState = igstAmount.gt(0)
+  const hasTax = isIntraState || isInterState
+
+  // Column widths (sum = CONTENT_W). Tax columns adapt:
+  //   intra-state: S.No(28) | Desc(190) | HSN(50) | Qty(34) | Rate(60) | Taxable(64) | CGST(48) | SGST(49)
+  //   inter-state: S.No(28) | Desc(220) | HSN(50) | Qty(34) | Rate(60) | Taxable(64) | IGST(67)
+  //   no-tax:      S.No(28) | Desc(280) | HSN(50) | Qty(34) | Rate(60) | Taxable(71)
+  type Col = { key: string; label: string; w: number; align: 'left' | 'right' | 'center' }
+  let cols: Col[]
+  if (isIntraState) {
+    cols = [
+      { key: 'sno', label: '#', w: 28, align: 'center' },
+      { key: 'desc', label: 'DESCRIPTION', w: 190, align: 'left' },
+      { key: 'hsn', label: 'HSN/SAC', w: 50, align: 'center' },
+      { key: 'qty', label: 'QTY', w: 34, align: 'right' },
+      { key: 'rate', label: 'RATE', w: 60, align: 'right' },
+      { key: 'taxable', label: 'TAXABLE', w: 64, align: 'right' },
+      { key: 'cgst', label: `CGST ${taxPct.div(2).toFixed(0)}%`, w: 48, align: 'right' },
+      { key: 'sgst', label: `SGST ${taxPct.div(2).toFixed(0)}%`, w: 49, align: 'right' },
+    ]
+  } else if (isInterState) {
+    cols = [
+      { key: 'sno', label: '#', w: 28, align: 'center' },
+      { key: 'desc', label: 'DESCRIPTION', w: 220, align: 'left' },
+      { key: 'hsn', label: 'HSN/SAC', w: 50, align: 'center' },
+      { key: 'qty', label: 'QTY', w: 34, align: 'right' },
+      { key: 'rate', label: 'RATE', w: 60, align: 'right' },
+      { key: 'taxable', label: 'TAXABLE', w: 64, align: 'right' },
+      { key: 'igst', label: `IGST ${taxPct.toFixed(0)}%`, w: 67, align: 'right' },
+    ]
+  } else {
+    cols = [
+      { key: 'sno', label: '#', w: 28, align: 'center' },
+      { key: 'desc', label: 'DESCRIPTION', w: 280, align: 'left' },
+      { key: 'hsn', label: 'HSN/SAC', w: 50, align: 'center' },
+      { key: 'qty', label: 'QTY', w: 34, align: 'right' },
+      { key: 'rate', label: 'RATE', w: 60, align: 'right' },
+      { key: 'taxable', label: 'TAXABLE', w: 71, align: 'right' },
+    ]
+  }
+
+  function drawTableHeader() {
+    doc.setFillColor(...NAVY)
+    doc.rect(MARGIN_X, y - 12, CONTENT_W, 20, 'F')
+    doc.setTextColor(...WHITE)
+    doc.setFont('helvetica', 'bold')
+    doc.setFontSize(8)
+    let cx = MARGIN_X
+    for (const col of cols) {
+      const tx = col.align === 'right' ? cx + col.w - 4
+        : col.align === 'center' ? cx + col.w / 2
+        : cx + 6
+      doc.text(col.label, tx, y, { align: col.align })
+      cx += col.w
+    }
+    y += 16
+  }
+
+  drawTableHeader()
+  doc.setFont('helvetica', 'normal')
+  doc.setFontSize(9)
+  doc.setTextColor(...SLATE_900)
+
+  // Per-line tax computation: divide the invoice-level tax in proportion
+  // to line totals so the displayed per-line taxes reconcile to the total.
+  const invoiceTax = isIntraState ? cgstAmount.plus(sgstAmount) : isInterState ? igstAmount : toDecimal(0)
+  const subtotalD = toDecimal(data.subtotal)
+
+  for (let i = 0; i < items.length; i++) {
+    const li = items[i]
+    // Single source of truth — normalised above. Never reach back into
+    // the raw item shape (.total / .amount) here.
+    const taxable = toDecimal(li.taxable)
+
+    // Per-line tax = invoice-level tax × (line / subtotal). Avoid div-by-zero.
+    const share = subtotalD.gt(0) ? taxable.div(subtotalD) : toDecimal(0)
+    const lineTaxTotal = invoiceTax.times(share)
+    const lineCgst = isIntraState ? lineTaxTotal.div(2) : toDecimal(0)
+    const lineSgst = isIntraState ? lineTaxTotal.div(2) : toDecimal(0)
+    const lineIgst = isInterState ? lineTaxTotal : toDecimal(0)
+
+    // Wrap description; estimate row height
+    const descCol = cols.find(c => c.key === 'desc')!
+    const descLines = doc.splitTextToSize(li.description ?? '—', descCol.w - 8)
+    const rowH = Math.max(14, descLines.length * 11 + 4)
+
+    // Page break check
+    if (y + rowH > PAGE_H - 120) {
+      doc.addPage()
+      y = 50
+      drawTableHeader()
+      doc.setFont('helvetica', 'normal')
+      doc.setFontSize(9)
+      doc.setTextColor(...SLATE_900)
+    }
+
+    // Alternating row background
+    if (i % 2 === 1) {
+      doc.setFillColor(248, 250, 252)
+      doc.rect(MARGIN_X, y - 10, CONTENT_W, rowH, 'F')
+    }
+
+    let cx = MARGIN_X
+    for (const col of cols) {
+      const tx = col.align === 'right' ? cx + col.w - 4
+        : col.align === 'center' ? cx + col.w / 2
+        : cx + 6
+      let value = ''
+      switch (col.key) {
+        case 'sno': value = String(i + 1); break
+        case 'desc': value = ''; break  // drawn separately for wrap
+        case 'hsn': value = li.hsn ?? '—'; break
+        case 'qty': value = String(li.qty); break
+        case 'rate': value = formatINRPlain(li.rate); break
+        case 'taxable': value = formatINRPlain(taxable); break
+        case 'cgst': value = formatINRPlain(lineCgst); break
+        case 'sgst': value = formatINRPlain(lineSgst); break
+        case 'igst': value = formatINRPlain(lineIgst); break
+      }
+      if (col.key === 'desc') {
+        doc.text(descLines, cx + 6, y)
+      } else {
+        doc.text(value, tx, y, { align: col.align })
+      }
+      cx += col.w
+    }
+
+    // Row separator
+    doc.setDrawColor(...SLATE_200)
+    doc.line(MARGIN_X, y - 10 + rowH, MARGIN_X + CONTENT_W, y - 10 + rowH)
+    y += rowH
+  }
+
+  y += 10
+
+  // ── Totals stack (right-aligned) ──────────────────────────────────
+  const totalsRightX = MARGIN_X + CONTENT_W
+  const totalsLabelX = totalsRightX - 160
+  const totalsValueX = totalsRightX - 4
+
+  function totalsRow(label: string, value: string, opts: { bold?: boolean; color?: [number, number, number] } = {}) {
+    doc.setFont('helvetica', opts.bold ? 'bold' : 'normal')
+    doc.setFontSize(10)
+    doc.setTextColor(...(opts.color ?? SLATE_600))
+    doc.text(label, totalsLabelX, y, { align: 'right' })
+    doc.setTextColor(...(opts.color ?? SLATE_900))
+    doc.text(value, totalsValueX, y, { align: 'right' })
+    y += 16
+  }
+
+  totalsRow('Taxable Subtotal', formatPDFCurrency(data.subtotal))
+  if (isIntraState) {
+    totalsRow(`CGST (${taxPct.div(2).toFixed(2)}%)`, formatPDFCurrency(cgstAmount))
+    totalsRow(`SGST (${taxPct.div(2).toFixed(2)}%)`, formatPDFCurrency(sgstAmount))
+  } else if (isInterState) {
+    totalsRow(`IGST (${taxPct.toFixed(2)}%)`, formatPDFCurrency(igstAmount))
+  }
+
+  // ── Grand total — emphasised band ─────────────────────────────────
+  // BUG FIX (2B): the prior band started 16pt left of the label's right
+  // edge, leaving ~60pt of the right-aligned "GRAND TOTAL" text outside
+  // the navy fill — white-on-white, invisible. Anchor the band wide
+  // enough that the full label sits on the navy fill, with consistent
+  // 12pt padding around both label and value.
+  y += 6
+  const grandBandPaddingX = 12
+  const grandBandLeft = totalsLabelX - 110   // wide enough for "GRAND TOTAL" at 11pt bold + padding
+  const grandBandRight = totalsRightX + 4
+  const grandBandWidth = grandBandRight - grandBandLeft
+  const grandBandHeight = 28
+  doc.setFillColor(...NAVY)
+  doc.rect(grandBandLeft, y - 16, grandBandWidth, grandBandHeight, 'F')
+  doc.setTextColor(...WHITE)
+  doc.setFont('helvetica', 'bold')
+  doc.setFontSize(11)
+  // Label: right-aligned at totalsLabelX, kept inside the band.
+  doc.text('GRAND TOTAL', totalsLabelX, y + 2, { align: 'right' })
+  // Value: right-aligned with explicit inner padding from band's right edge.
+  doc.setFontSize(13)
+  doc.text(formatPDFCurrency(data.total), grandBandRight - grandBandPaddingX, y + 2, { align: 'right' })
+  y += 36
+
+  // Paid + outstanding (if any payments recorded)
+  const paid = toDecimal(data.paid_amount)
+  if (paid.gt(0)) {
+    totalsRow('Paid', `- ${formatPDFCurrency(paid)}`, { color: [34, 139, 34] })
+    const outstanding = toDecimal(data.total).minus(paid)
+    if (outstanding.gt(0)) {
+      totalsRow('Amount Due', formatPDFCurrency(outstanding), { bold: true, color: ORANGE })
+    } else {
+      totalsRow('Status', 'Paid in Full', { bold: true, color: [34, 139, 34] })
+    }
   }
 
   y += 8
 
-  /* Totals stack */
-  const labelX = pageWidth - margin - 130
-  const valueX = pageWidth - margin - 4
-  const row = (label: string, value: string, opts: { bold?: boolean; color?: [number, number, number] } = {}) => {
-    doc.setFont('helvetica', opts.bold ? 'bold' : 'normal')
-    doc.setFontSize(10)
-    doc.setTextColor(...(opts.color ?? SLATE_700))
-    doc.text(label, labelX, y, { align: 'right' })
-    doc.text(value, valueX, y, { align: 'right' })
-    y += 14
-  }
-
-  row('Subtotal', fmt(data.subtotal, data.currency))
-  if (data.tax_pct > 0) row(`Tax (${data.tax_pct}%)`, fmt(data.total - data.subtotal, data.currency))
-  row('Total', fmt(data.total, data.currency), { bold: true, color: NAVY })
-  if (data.paid_amount > 0) row('Paid', `- ${fmt(data.paid_amount, data.currency)}`, { color: EMERALD })
-
-  const outstanding = Math.max(0, data.total - (data.paid_amount ?? 0))
-  if (outstanding > 0) {
-    y += 4
-    doc.setFillColor(...ORANGE)
-    doc.rect(labelX - 6, y - 12, valueX - labelX + 14, 22, 'F')
-    doc.setTextColor(255, 255, 255)
-    doc.setFont('helvetica', 'bold')
-    doc.setFontSize(11)
-    doc.text('AMOUNT DUE', labelX, y + 2, { align: 'right' })
-    doc.text(fmt(outstanding, data.currency), valueX, y + 2, { align: 'right' })
-    y += 22
-  } else if (data.paid_amount > 0) {
-    y += 4
-    doc.setFillColor(...EMERALD)
-    doc.rect(labelX - 6, y - 12, valueX - labelX + 14, 22, 'F')
-    doc.setTextColor(255, 255, 255)
-    doc.setFont('helvetica', 'bold')
-    doc.setFontSize(11)
-    doc.text('PAID IN FULL', labelX, y + 2, { align: 'right' })
-    doc.text(fmtDate(data.paid_date), valueX, y + 2, { align: 'right' })
-    y += 22
-  }
-
-  y += 24
-
-  /* Notes & terms */
-  if (data.notes) {
-    if (y > 720) { doc.addPage(); y = margin }
-    doc.setTextColor(...SLATE_400)
-    doc.setFont('helvetica', 'bold')
-    doc.setFontSize(8)
-    doc.text('NOTES', margin, y)
-    y += 10
-    doc.setFont('helvetica', 'normal')
-    doc.setFontSize(9)
-    doc.setTextColor(...SLATE_700)
-    const notesLines = doc.splitTextToSize(data.notes, pageWidth - 2 * margin)
-    doc.text(notesLines, margin, y)
-    y += notesLines.length * 12 + 12
-  }
-
-  if (data.terms) {
-    if (y > 720) { doc.addPage(); y = margin }
-    doc.setTextColor(...SLATE_400)
-    doc.setFont('helvetica', 'bold')
-    doc.setFontSize(8)
-    doc.text('TERMS & CONDITIONS', margin, y)
-    y += 10
-    doc.setFont('helvetica', 'normal')
-    doc.setFontSize(9)
-    doc.setTextColor(...SLATE_700)
-    const termsLines = doc.splitTextToSize(data.terms, pageWidth - 2 * margin)
-    doc.text(termsLines, margin, y)
-    y += termsLines.length * 12
-  }
-
-  /* Footer */
-  const pageHeight = doc.internal.pageSize.getHeight()
-  doc.setDrawColor(230, 232, 240)
-  doc.line(margin, pageHeight - 50, pageWidth - margin, pageHeight - 50)
-  doc.setTextColor(...SLATE_400)
+  // ── Amount in words ───────────────────────────────────────────────
+  if (y > PAGE_H - 200) { doc.addPage(); y = 50 }
+  doc.setFont('helvetica', 'bold')
   doc.setFontSize(8)
-  doc.text(`Generated ${new Date().toLocaleDateString('en-IN')} · ${data.organisation.name}`, margin, pageHeight - 32)
-  doc.text('Powered by Imperial CRM', pageWidth - margin, pageHeight - 32, { align: 'right' })
+  doc.setTextColor(...SLATE_400)
+  doc.text('AMOUNT IN WORDS', MARGIN_X, y)
+  y += 12
+  doc.setFont('helvetica', 'italic')
+  doc.setFontSize(10)
+  doc.setTextColor(...NAVY)
+  const wordsLines = doc.splitTextToSize(amountInWords(data.total, data.currency), CONTENT_W)
+  doc.text(wordsLines, MARGIN_X, y)
+  y += wordsLines.length * 12 + 12
+
+  // ── Notes & terms ─────────────────────────────────────────────────
+  function renderSection(title: string, body: string) {
+    if (y > PAGE_H - 140) { doc.addPage(); y = 50 }
+    doc.setFont('helvetica', 'bold')
+    doc.setFontSize(8)
+    doc.setTextColor(...SLATE_400)
+    doc.text(title, MARGIN_X, y)
+    y += 12
+    doc.setFont('helvetica', 'normal')
+    doc.setFontSize(9)
+    doc.setTextColor(...SLATE_900)
+    const lines = doc.splitTextToSize(body, CONTENT_W)
+    doc.text(lines, MARGIN_X, y)
+    y += lines.length * 12 + 12
+  }
+  if (data.notes) renderSection('NOTES', data.notes)
+  if (data.terms) renderSection('TERMS & CONDITIONS', data.terms)
+
+  // ── Footer: computer-generated line + watermark ───────────────────
+  // Always place on the LAST page near the bottom.
+  const totalPages = (doc as unknown as { internal: { pages: unknown[] } }).internal.pages.length - 1
+  for (let p = 1; p <= totalPages; p++) {
+    doc.setPage(p)
+    const footerY = PAGE_H - 60
+
+    doc.setDrawColor(...SLATE_200)
+    doc.line(MARGIN_X, footerY, PAGE_W - MARGIN_X, footerY)
+
+    doc.setFont('helvetica', 'italic')
+    doc.setFontSize(8)
+    doc.setTextColor(...SLATE_400)
+    doc.text(
+      'This is a computer-generated invoice and does not require a signature.',
+      PAGE_W / 2, footerY + 14, { align: 'center' },
+    )
+
+    doc.text(LEGAL_SELLER_LINE, PAGE_W / 2, footerY + 26, { align: 'center' })
+
+    if (!data.hide_watermark) {
+      doc.setTextColor(...BLUE)
+      doc.text(WATERMARK_LINES.icrm, PAGE_W / 2, footerY + 38, { align: 'center' })
+    }
+
+    // Page number (right-aligned)
+    doc.setTextColor(...SLATE_400)
+    doc.text(`Page ${p} of ${totalPages}`, PAGE_W - MARGIN_X, footerY + 50, { align: 'right' })
+  }
 
   return new Uint8Array(doc.output('arraybuffer'))
 }
 
-/** Fetch invoice + org + account from Supabase and shape into PDF data. */
-export async function loadInvoiceForPdf(supabaseAdmin: import('@supabase/supabase-js').SupabaseClient, invoiceId: string, orgId: string | null): Promise<InvoicePdfData | null> {
+// ─────────────────────────────────────────────────────────────────────
+//  Data loader — read snapshot fields, fall back to live join
+// ─────────────────────────────────────────────────────────────────────
+
+export async function loadInvoiceForPdf(
+  supabaseAdmin: import('@supabase/supabase-js').SupabaseClient,
+  invoiceId: string,
+  orgId: string | null,
+): Promise<InvoicePdfData | null> {
   let query = supabaseAdmin
     .from('crm_invoices')
     .select(`
       invoice_number, status, issue_date, due_date, paid_date,
       items, subtotal, tax_pct, total, paid_amount, currency, notes, terms, org_id,
-      crm_accounts!account_id(name, email, phone, billing_address)
+      buyer_name, buyer_gstin, buyer_address, buyer_state, buyer_state_code,
+      seller_state_code, place_of_supply,
+      cgst_amount, sgst_amount, igst_amount,
+      crm_accounts!account_id(
+        name, gstin, billing_address,
+        billing_address_line1, billing_address_line2,
+        billing_city, billing_state, billing_state_code,
+        billing_pincode, billing_country
+      )
     `)
     .eq('id', invoiceId)
 
   if (orgId) query = query.eq('org_id', orgId)
 
-  const { data: inv } = await query.single()
+  type AccountRow = {
+    name: string; gstin: string | null;
+    billing_address: Record<string, unknown> | null;
+    billing_address_line1: string | null; billing_address_line2: string | null;
+    billing_city: string | null; billing_state: string | null;
+    billing_state_code: string | null; billing_pincode: string | null;
+    billing_country: string | null;
+  }
+  const { data: inv } = await query.single() as { data: {
+    invoice_number: string; status: string; issue_date: string;
+    due_date: string | null; paid_date: string | null;
+    items: InvoiceLineItem[]; subtotal: string; tax_pct: string; total: string;
+    paid_amount: string; currency: string; notes: string | null; terms: string | null;
+    org_id: string;
+    buyer_name: string | null; buyer_gstin: string | null; buyer_address: Record<string, unknown> | null;
+    buyer_state: string | null; buyer_state_code: string | null;
+    seller_state_code: string | null; place_of_supply: string | null;
+    cgst_amount: string; sgst_amount: string; igst_amount: string;
+    crm_accounts: AccountRow | AccountRow[] | null;
+  } | null }
   if (!inv) return null
 
   const { data: org } = await supabaseAdmin
     .from('organisations')
-    .select('name, gstin, pan, phone, website, address, logo_url')
+    .select('name, gstin, pan, phone, email, website, address, state, state_code, logo_url, contact_phone, billing_email')
     .eq('id', inv.org_id)
-    .single()
+    .single() as { data: {
+      name: string; gstin: string | null; pan: string | null;
+      phone: string | null; email: string | null; website: string | null;
+      address: string | null; state: string | null; state_code: string | null;
+      logo_url: string | null; contact_phone: string | null; billing_email: string | null;
+    } | null }
 
   const account = Array.isArray(inv.crm_accounts) ? inv.crm_accounts[0] : inv.crm_accounts
+
+  // Build buyer_address with fallback priority:
+  //   1. Snapshot column on the invoice (Phase 5)
+  //   2. Structured billing_* columns on the account (M120)
+  //   3. Legacy JSONB billing_address on the account
+  let resolvedBuyerAddress: InvoicePdfData['buyer_address'] =
+    inv.buyer_address as InvoicePdfData['buyer_address']
+  if (!resolvedBuyerAddress && account) {
+    const anyStructured =
+      account.billing_address_line1 || account.billing_address_line2 ||
+      account.billing_city || account.billing_state ||
+      account.billing_pincode || account.billing_country
+    if (anyStructured) {
+      resolvedBuyerAddress = {
+        line1:   account.billing_address_line1,
+        line2:   account.billing_address_line2,
+        city:    account.billing_city,
+        state:   account.billing_state,
+        pincode: account.billing_pincode,
+        country: account.billing_country,
+      }
+    }
+  }
+
+  // Buyer state + state_code with the same fallback chain.
+  const resolvedBuyerState     = inv.buyer_state      ?? account?.billing_state      ?? null
+  const resolvedBuyerStateCode = inv.buyer_state_code ?? account?.billing_state_code ?? null
 
   return {
     invoice_number: inv.invoice_number,
@@ -252,23 +767,40 @@ export async function loadInvoiceForPdf(supabaseAdmin: import('@supabase/supabas
     issue_date: inv.issue_date,
     due_date: inv.due_date,
     paid_date: inv.paid_date,
-    items: inv.items ?? [],
-    subtotal: Number(inv.subtotal ?? 0),
-    tax_pct: Number(inv.tax_pct ?? 0),
-    total: Number(inv.total ?? 0),
-    paid_amount: Number(inv.paid_amount ?? 0),
+    items: (inv.items ?? []) as InvoiceLineItem[],
+    subtotal: inv.subtotal,
+    tax_pct: inv.tax_pct,
+    total: inv.total,
+    paid_amount: inv.paid_amount,
     currency: inv.currency ?? 'INR',
     notes: inv.notes,
     terms: inv.terms,
-    account: account ? { name: account.name, email: account.email, phone: account.phone, billing_address: account.billing_address } : null,
+    cgst_amount: inv.cgst_amount ?? '0',
+    sgst_amount: inv.sgst_amount ?? '0',
+    igst_amount: inv.igst_amount ?? '0',
+    buyer_name: inv.buyer_name ?? account?.name ?? null,
+    buyer_gstin: inv.buyer_gstin ?? account?.gstin ?? null,
+    buyer_address: resolvedBuyerAddress,
+    buyer_state: resolvedBuyerState,
+    buyer_state_code: resolvedBuyerStateCode,
+    seller_state_code: inv.seller_state_code,
+    place_of_supply: inv.place_of_supply,
     organisation: {
       name: org?.name ?? 'Your Organisation',
-      gstin: org?.gstin,
+      legal_name: org?.name === 'Imperial Tech Innovations' ? 'Imperial Healthcare Systems Pvt Ltd' : org?.name,
+      gstin: org?.gstin ?? null,
+      cin: org?.gstin === '06AAICI5025Q1Z6' ? 'U62099HR2025PTC137921' : null,
       pan: org?.pan,
-      phone: org?.phone,
+      phone: org?.phone ?? org?.contact_phone ?? null,
+      email: org?.email ?? org?.billing_email ?? null,
       website: org?.website,
       address: org?.address,
+      state: org?.state,
+      state_code: org?.state_code,
       logo_url: org?.logo_url,
     },
+    account_fallback: account
+      ? { name: account.name, gstin: account.gstin, billing_address: account.billing_address }
+      : null,
   }
 }

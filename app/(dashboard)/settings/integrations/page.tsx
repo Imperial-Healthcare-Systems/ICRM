@@ -1,6 +1,6 @@
 'use client'
 
-import { useSession } from 'next-auth/react'
+import { useSession } from '@/lib/use-session'
 import { Puzzle, CheckCircle, XCircle, Copy, Check, ExternalLink } from 'lucide-react'
 import { useState } from 'react'
 import toast from 'react-hot-toast'

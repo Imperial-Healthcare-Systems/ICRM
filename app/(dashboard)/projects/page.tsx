@@ -26,7 +26,7 @@ const PRIORITY_COLORS: Record<string, string> = {
 }
 
 const fmt = (n: number | null, c = 'INR') =>
-  n == null ? '—' : new Intl.NumberFormat('en-IN', { style: 'currency', currency: c, maximumFractionDigits: 0 }).format(n)
+  n == null ? '—' : new Intl.NumberFormat('en-IN', { style: 'currency', currency: c, minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(n)
 
 export default function ProjectsPage() {
   const [projects, setProjects] = useState<Project[]>([])

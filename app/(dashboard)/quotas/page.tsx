@@ -26,7 +26,7 @@ const fmtNum = (n: number, c = 'INR', metric = 'revenue') => {
     if (n >= 10_000_000) return `₹${(n / 10_000_000).toFixed(1)}Cr`
     if (n >= 100_000)    return `₹${(n / 100_000).toFixed(1)}L`
     if (n >= 1_000)      return `₹${(n / 1_000).toFixed(1)}K`
-    return new Intl.NumberFormat('en-IN', { style: 'currency', currency: c, maximumFractionDigits: 0 }).format(n)
+    return new Intl.NumberFormat('en-IN', { style: 'currency', currency: c, minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(n)
   }
   return new Intl.NumberFormat('en-IN').format(n)
 }

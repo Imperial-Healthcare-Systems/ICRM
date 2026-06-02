@@ -53,7 +53,7 @@ export default function QuotationsPage() {
   }
 
   const fmt = (n: number, currency = 'INR') =>
-    new Intl.NumberFormat('en-IN', { style: 'currency', currency, maximumFractionDigits: 0 }).format(n)
+    new Intl.NumberFormat('en-IN', { style: 'currency', currency, minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(n)
 
   const totalPages = Math.ceil(count / pageSize)
 

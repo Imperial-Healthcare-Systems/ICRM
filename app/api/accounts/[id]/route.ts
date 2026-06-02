@@ -22,6 +22,11 @@ const ALLOWED_FIELDS = [
   'name', 'website', 'industry', 'account_type', 'phone', 'email',
   'billing_address', 'shipping_address', 'annual_revenue', 'employee_count',
   'assigned_to', 'parent_account', 'tags', 'custom_fields', 'notes',
+  // GST + structured billing address (M120)
+  'gstin',
+  'billing_address_line1', 'billing_address_line2',
+  'billing_city', 'billing_state', 'billing_state_code',
+  'billing_pincode', 'billing_country',
 ]
 
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {

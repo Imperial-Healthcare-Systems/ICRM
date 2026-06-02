@@ -23,7 +23,7 @@ const STATUS_COLORS: Record<string, string> = {
   expired: 'bg-yellow-500/15 text-yellow-400',
 }
 
-const fmt = (n: number, c = 'INR') => new Intl.NumberFormat('en-IN', { style: 'currency', currency: c, maximumFractionDigits: 0 }).format(n ?? 0)
+const fmt = (n: number, c = 'INR') => new Intl.NumberFormat('en-IN', { style: 'currency', currency: c, minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(n ?? 0)
 
 async function convertToInvoice(id: string) {
   if (!confirm('Convert this quotation to an invoice?')) return

@@ -26,6 +26,10 @@ import crypto from 'node:crypto'
 import { supabaseAdmin } from '@/lib/supabase'
 import { sendInvoiceEmail } from '@/lib/mailer'
 import { createPaymentSession } from '@/lib/cashfree'
+import {
+  toDecimal, multiply, sumDecimals, applyTax,
+  toCurrencyString, toCurrencyNumber, formatINR,
+} from '@/lib/money'
 
 function verifyCron(req: NextRequest) {
   const secret = process.env.CRON_SECRET
@@ -95,14 +99,14 @@ export async function GET(req: NextRequest) {
       continue
     }
 
-    const seats = Number(sub.seats ?? 1)
-    const rate = Number(sub.amount_per_month ?? 0)
-    if (rate <= 0) {
+    const seats = toDecimal(sub.seats ?? 1)
+    const rate = toDecimal(sub.amount_per_month ?? 0)
+    if (rate.lte(0)) {
       skipped.push({ org_id: sub.org_id, reason: 'zero amount_per_month' })
       continue
     }
 
-    const baseSubtotal = rate * seats
+    const baseSubtotal = multiply(rate, seats)
 
     // Fold open seat overages (events not yet stamped into any invoice).
     const { data: overages } = await supabaseAdmin
@@ -111,13 +115,19 @@ export async function GET(req: NextRequest) {
       .eq('subscription_id', sub.id)
       .is('invoiced_in', null)
 
-    const overageSubtotal = (overages ?? []).reduce(
-      (s, o) => s + Number((o as { amount_inr: number | string }).amount_inr ?? 0),
-      0,
+    const overageSubtotal = sumDecimals(
+      (overages ?? []).map(o => (o as { amount_inr: number | string }).amount_inr ?? 0),
     )
-    const subtotal = Number((baseSubtotal + overageSubtotal).toFixed(2))
-    const tax = Number((subtotal * (TAX_PCT / 100)).toFixed(2))
-    const total = Number((subtotal + tax).toFixed(2))
+
+    // Precision: compute subtotal, tax, and total at FULL precision in one
+    // chain — no intermediate rounding. Round once at the end via
+    // toCurrencyString when writing to the DB. This replaces the prior
+    // triple-`.toFixed(2)` cascade where each step locked in float drift.
+    const subtotalD = baseSubtotal.plus(overageSubtotal)
+    const { tax: taxD, total: totalD } = applyTax(subtotalD, TAX_PCT)
+    const subtotal = toCurrencyString(subtotalD)
+    const tax = toCurrencyString(taxD)
+    const total = toCurrencyString(totalD)
 
     // Period bounds — start from prior period_end (if any), else today.
     const periodStartStr = sub.current_period_end ?? sub.next_billing_date ?? today
@@ -134,7 +144,7 @@ export async function GET(req: NextRequest) {
       try {
         const cfRes = await createPaymentSession({
           orderId: invoiceNumber,
-          orderAmount: total,
+          orderAmount: toCurrencyNumber(totalD),
           customerEmail: org.billing_email ?? 'billing@imperialcrm.cloud',
           customerPhone: org.contact_phone ?? '0000000000',
           customerName: org.name,
@@ -197,17 +207,13 @@ export async function GET(req: NextRequest) {
 
     const toEmail = admin?.email ?? org.billing_email
     if (toEmail) {
-      const fmt = (n: number) => new Intl.NumberFormat('en-IN', {
-        style: 'currency', currency: sub.currency ?? 'INR', maximumFractionDigits: 0,
-      }).format(n)
-
       try {
         await sendInvoiceEmail({
           to: toEmail,
           name: admin?.full_name ?? 'Administrator',
           orgName: org.name,
           invoiceNumber: inv.invoice_number ?? invoiceNumber,
-          amount: fmt(inv.total),
+          amount: formatINR(inv.total, sub.currency ?? 'INR'),
           period: periodLabel,
           dueDate: dueDateStr,
           invoiceUrl: `${process.env.NEXT_PUBLIC_APP_URL ?? 'https://imperialcrm.cloud'}/billing/pay?invoice=${invoiceNumber}`,

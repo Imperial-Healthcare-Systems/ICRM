@@ -3,6 +3,10 @@ import { getTenantClient } from '@/lib/session'
 import { supabaseAdmin } from '@/lib/supabase'
 import { checkMutationLimit, checkReadLimit } from '@/lib/rate-limit'
 import { logAudit } from '@/lib/audit'
+import {
+  toDecimal, sumDecimals, toCurrencyString, toCurrencyNumber,
+  greaterThanToPaise,
+} from '@/lib/money'
 
 export async function GET(_req: NextRequest) {
   const { session, supabase, error } = await getTenantClient()
@@ -46,8 +50,9 @@ export async function POST(req: NextRequest) {
 
   if (!invoice_id) return NextResponse.json({ error: 'invoice_id is required.' }, { status: 400 })
 
-  const amount = Number(amount_inr)
-  if (!Number.isFinite(amount) || amount <= 0) {
+  // Precision: parse as Decimal — float-free refund accounting.
+  const amount = toDecimal(amount_inr)
+  if (!amount.isFinite() || amount.lte(0)) {
     return NextResponse.json({ error: 'amount_inr must be a positive number.' }, { status: 400 })
   }
   if (!reason?.trim()) {
@@ -72,17 +77,17 @@ export async function POST(req: NextRequest) {
     .eq('invoice_id', invoice_id)
     .in('status', ['approved', 'executed', 'pending'])
 
-  const reservedAmount = (existingRefunds ?? []).reduce((sum, r) => sum + Number(r.amount_inr), 0)
-  const paid = Number(invoice.paid_amount ?? 0)
-  const maxRefundable = paid - reservedAmount
+  const reservedAmount = sumDecimals((existingRefunds ?? []).map(r => r.amount_inr))
+  const paid = toDecimal(invoice.paid_amount ?? 0)
+  const maxRefundable = paid.minus(reservedAmount)
 
-  if (amount > maxRefundable + 0.01) {
+  if (greaterThanToPaise(amount, maxRefundable)) {
     return NextResponse.json(
       {
-        error: `Refund amount exceeds refundable balance. Max refundable: ${maxRefundable.toFixed(2)} (paid ${paid.toFixed(2)}, already requested/refunded ${reservedAmount.toFixed(2)}).`,
-        max_refundable: maxRefundable,
-        paid_amount: paid,
-        already_requested_or_refunded: reservedAmount,
+        error: `Refund amount exceeds refundable balance. Max refundable: ${toCurrencyString(maxRefundable)} (paid ${toCurrencyString(paid)}, already requested/refunded ${toCurrencyString(reservedAmount)}).`,
+        max_refundable: toCurrencyNumber(maxRefundable),
+        paid_amount: toCurrencyNumber(paid),
+        already_requested_or_refunded: toCurrencyNumber(reservedAmount),
       },
       { status: 400 },
     )
@@ -92,7 +97,7 @@ export async function POST(req: NextRequest) {
     .from('refund_approvals')
     .insert({
       invoice_id,
-      amount_inr: amount,
+      amount_inr: toCurrencyString(amount),
       reason: reason.trim(),
       status: 'pending',
       requested_by: actorId,
@@ -114,7 +119,7 @@ export async function POST(req: NextRequest) {
     meta: {
       invoice_id,
       invoice_number: invoice.invoice_number,
-      amount_inr: amount,
+      amount_inr: toCurrencyNumber(amount),
       reason: reason.trim(),
     },
   })
