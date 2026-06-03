@@ -111,6 +111,10 @@ export type InvoicePdfData = {
   igst_amount: number | string
   // Buyer snapshot (M121) — falls back to account live-join for historical rows
   buyer_name: string | null
+  /** Contact person at the buyer org — primary line in the ATTENTION box. */
+  buyer_contact_name?: string | null
+  /** Contact person phone — secondary line in the ATTENTION box. */
+  buyer_contact_phone?: string | null
   buyer_gstin: string | null
   buyer_address: {
     line1?: string | null; line2?: string | null;
@@ -247,7 +251,7 @@ export function buildInvoicePdf(data: InvoicePdfData): Uint8Array {
   doc.setFontSize(8)
   doc.setTextColor(...SLATE_400)
   doc.text('FROM',    fromX, y)
-  doc.text('BILL TO', billX, y)
+  // BILL TO label is drawn by the right-column boxed-section renderer below.
   y += 14
 
   // FROM block — brand name + legal-entity disclaimer
@@ -301,25 +305,17 @@ export function buildInvoicePdf(data: InvoicePdfData): Uint8Array {
     fromY += contactLines.length * 11
   }
 
-  // ── BILL TO block — spec-compliant order ──────────────────────────
-  // Line 1: name (bold)
-  // Line 2: address_line1  (or "Address not provided" placeholder)
-  // Line 3: address_line2  (omit if empty)
-  // Line 4: "city, state – pincode"
-  // Line 5: country (omit if India when seller is India too)
-  // Line 6: "GSTIN: …"  (or italic "Not registered (B2C)" if absent)
-  let toY = y
-  const buyerName = data.buyer_name ?? data.account_fallback?.name ?? '—'
-  doc.setTextColor(...NAVY)
-  doc.setFont('helvetica', 'bold')
-  doc.setFontSize(11)
-  doc.text(buyerName, billX, toY)
-  toY += 14
-  doc.setFont('helvetica', 'normal')
-  doc.setFontSize(9)
-  doc.setTextColor(...SLATE_600)
+  // ── BILL TO + ATTENTION (two boxed sections in the right column) ──
+  // Box 1 (BILL TO):    company name, address, GSTIN
+  // Box 2 (ATTENTION):  representative name + phone
+  //
+  // Each box has a slate-50 fill + slate-200 border. Content height is
+  // computed first so the fill rectangle is the right size before any
+  // text is drawn.
 
-  // Decide what address content (if any) is available.
+  // Resolve content for both boxes.
+  const buyerName = data.buyer_name ?? data.account_fallback?.name ?? '—'
+  const buyerGstin = data.buyer_gstin ?? data.account_fallback?.gstin ?? null
   const addr = data.buyer_address
   const fb = data.account_fallback?.billing_address as Record<string, unknown> | undefined
   const line1 = addr?.line1 ?? (fb?.line1 as string | undefined) ?? null
@@ -328,68 +324,119 @@ export function buildInvoicePdf(data: InvoicePdfData): Uint8Array {
   const state = addr?.state ?? (fb?.state as string | undefined) ?? data.buyer_state ?? null
   const pincode = addr?.pincode ?? (fb?.pincode as string | undefined) ?? null
   const country = addr?.country ?? (fb?.country as string | undefined) ?? null
+  const stateWithCode = state
+    ? (data.buyer_state_code ? `${state} (${data.buyer_state_code})` : String(state))
+    : null
+  const cityStateLine = joinNonEmpty([
+    joinNonEmpty([city, stateWithCode]),
+    pincode,
+  ], ' – ')
+  const sellerIsIndia = !data.organisation.state_code || /^[0-3]\d$/.test(data.organisation.state_code)
+  const countryLine = country && !(String(country).toLowerCase() === 'india' && sellerIsIndia)
+    ? String(country) : null
 
-  const anyAddrPart = !!(line1 || line2 || city || state || pincode)
-
-  if (!anyAddrPart) {
-    // Spec: render a placeholder in muted italic when nothing is available.
-    doc.setFont('helvetica', 'italic')
-    doc.setTextColor(...SLATE_400)
-    doc.text('Address not provided', billX, toY)
-    doc.setFont('helvetica', 'normal')
-    doc.setTextColor(...SLATE_600)
-    toY += 11
-  } else {
-    // Line 2 — address_line1 (placeholder if missing but other lines exist)
-    if (line1) {
-      const wrapped = doc.splitTextToSize(String(line1), colW) as string[]
-      for (const w of wrapped) { doc.text(w, billX, toY); toY += 11 }
-    } else {
-      doc.setFont('helvetica', 'italic')
-      doc.setTextColor(...SLATE_400)
-      doc.text('Address line 1 not provided', billX, toY)
-      doc.setFont('helvetica', 'normal')
-      doc.setTextColor(...SLATE_600)
-      toY += 11
-    }
-    // Line 3 — address_line2 (omit if missing)
-    if (line2) {
-      const wrapped = doc.splitTextToSize(String(line2), colW) as string[]
-      for (const w of wrapped) { doc.text(w, billX, toY); toY += 11 }
-    }
-    // Line 4 — "city, state – pincode" (only emit parts that exist)
-    const stateWithCode = state
-      ? (data.buyer_state_code ? `${state} (${data.buyer_state_code})` : String(state))
-      : null
-    const cityStatePart = joinNonEmpty([city, stateWithCode])
-    const line4 = joinNonEmpty([cityStatePart, pincode], ' – ')
-    if (line4) { doc.text(line4, billX, toY); toY += 11 }
-    // Line 5 — country (omit if India and seller is India)
-    const sellerIsIndia = !data.organisation.state_code || /^[0-3]\d$/.test(data.organisation.state_code)
-    if (country && !(String(country).toLowerCase() === 'india' && sellerIsIndia)) {
-      doc.text(String(country), billX, toY)
-      toY += 11
-    }
+  // Build the ordered Bill-To line list (each entry already-wrapped to colW)
+  const billLines: Array<{ text: string; kind: 'bold' | 'normal' | 'gstin' | 'muted-italic' }> = []
+  billLines.push({ text: buyerName, kind: 'bold' })
+  // Address
+  const innerW = colW - 24  // account for 12pt padding on each side of the box
+  if (line1) {
+    for (const w of doc.splitTextToSize(String(line1), innerW) as string[])
+      billLines.push({ text: w, kind: 'normal' })
   }
-
-  // Line 6 — GSTIN
-  const buyerGstin = data.buyer_gstin ?? data.account_fallback?.gstin ?? null
+  if (line2) {
+    for (const w of doc.splitTextToSize(String(line2), innerW) as string[])
+      billLines.push({ text: w, kind: 'normal' })
+  }
+  if (cityStateLine) billLines.push({ text: cityStateLine, kind: 'normal' })
+  if (countryLine)   billLines.push({ text: countryLine, kind: 'normal' })
+  if (!line1 && !line2 && !cityStateLine && !countryLine) {
+    billLines.push({ text: 'Address not provided', kind: 'muted-italic' })
+  }
+  // GSTIN
   if (buyerGstin) {
-    doc.setFont('helvetica', 'bold')
-    doc.setTextColor(...NAVY)
-    doc.text(`GSTIN: ${buyerGstin}`, billX, toY)
-    doc.setFont('helvetica', 'normal')
-    doc.setTextColor(...SLATE_600)
-    toY += 11
+    billLines.push({ text: `GSTIN: ${buyerGstin}`, kind: 'gstin' })
   } else {
-    doc.setFont('helvetica', 'italic')
-    doc.setTextColor(...SLATE_400)
-    doc.text('GSTIN: Not registered (B2C)', billX, toY)
-    doc.setFont('helvetica', 'normal')
-    doc.setTextColor(...SLATE_600)
-    toY += 11
+    billLines.push({ text: 'GSTIN: Not registered (B2C)', kind: 'muted-italic' })
   }
 
+  // Build Attention lines.
+  const contactName = (data.buyer_contact_name ?? '').trim()
+  const contactPhone = (data.buyer_contact_phone ?? '').trim()
+  const attnLines: Array<{ text: string; kind: 'bold' | 'normal' | 'muted-italic' }> = []
+  if (contactName) attnLines.push({ text: contactName, kind: 'bold' })
+  if (contactPhone) attnLines.push({ text: contactPhone, kind: 'normal' })
+  if (attnLines.length === 0) {
+    attnLines.push({ text: 'Not provided', kind: 'muted-italic' })
+  }
+
+  // Box geometry — label sits above each box, content inside.
+  const labelGap = 14        // space between section label and the box
+  const boxPadY = 10
+  const lineH = 12           // pt per content line
+  const boxGap = 10          // gap between Bill-To and Attention boxes
+
+  function drawBoxedSection(
+    label: string,
+    lines: Array<{ text: string; kind: 'bold' | 'normal' | 'gstin' | 'muted-italic' }>,
+    startY: number,
+  ): number {
+    // Section label
+    doc.setFont('helvetica', 'bold')
+    doc.setFontSize(8)
+    doc.setTextColor(...SLATE_400)
+    doc.text(label, billX, startY)
+    const contentTop = startY + labelGap
+
+    const boxH = boxPadY * 2 + lines.length * lineH
+
+    // Box: slate-50 fill + slate-200 border
+    doc.setFillColor(248, 250, 252)
+    doc.rect(billX, contentTop - boxPadY, colW, boxH, 'F')
+    doc.setDrawColor(...SLATE_200)
+    doc.setLineWidth(0.5)
+    doc.rect(billX, contentTop - boxPadY, colW, boxH, 'S')
+
+    // Content
+    let ly = contentTop + 2
+    for (const { text, kind } of lines) {
+      switch (kind) {
+        case 'bold':
+          doc.setFont('helvetica', 'bold')
+          doc.setFontSize(11)
+          doc.setTextColor(...NAVY)
+          break
+        case 'gstin':
+          doc.setFont('helvetica', 'bold')
+          doc.setFontSize(9)
+          doc.setTextColor(...NAVY)
+          break
+        case 'muted-italic':
+          doc.setFont('helvetica', 'italic')
+          doc.setFontSize(9)
+          doc.setTextColor(...SLATE_400)
+          break
+        default:
+          doc.setFont('helvetica', 'normal')
+          doc.setFontSize(9)
+          doc.setTextColor(...SLATE_600)
+      }
+      doc.text(text, billX + 12, ly)
+      ly += lineH
+    }
+
+    return contentTop + boxH
+  }
+
+  // Draw both boxes. The first box's label sits at the same vertical
+  // position as the "FROM" label on the left column (y − 14), so the
+  // two columns line up visually. The second box gets fresh label gap
+  // for breathing room.
+  let toY = drawBoxedSection('BILL TO', billLines, y - 14)
+  toY += boxGap
+  toY = drawBoxedSection('ATTENTION', attnLines, toY)
+
+  // Bottom of right column (used by the outer Math.max layout step).
   y = Math.max(fromY, toY) + 16
 
   // (The tech-brand disclosure now renders inside the FROM block,
@@ -814,7 +861,8 @@ export async function loadInvoiceForPdf(
         billing_address_line1, billing_address_line2,
         billing_city, billing_state, billing_state_code,
         billing_pincode, billing_country
-      )
+      ),
+      crm_contacts!contact_id(first_name, last_name, phone, mobile)
     `)
     .eq('id', invoiceId)
 
@@ -828,6 +876,7 @@ export async function loadInvoiceForPdf(
     billing_state_code: string | null; billing_pincode: string | null;
     billing_country: string | null;
   }
+  type ContactRow = { first_name: string | null; last_name: string | null; phone: string | null; mobile: string | null }
   const { data: inv } = await query.single() as { data: {
     invoice_number: string; status: string; issue_date: string;
     due_date: string | null; paid_date: string | null;
@@ -839,6 +888,7 @@ export async function loadInvoiceForPdf(
     seller_state_code: string | null; place_of_supply: string | null;
     cgst_amount: string; sgst_amount: string; igst_amount: string;
     crm_accounts: AccountRow | AccountRow[] | null;
+    crm_contacts: ContactRow | ContactRow[] | null;
   } | null }
   if (!inv) return null
 
@@ -854,6 +904,12 @@ export async function loadInvoiceForPdf(
     } | null }
 
   const account = Array.isArray(inv.crm_accounts) ? inv.crm_accounts[0] : inv.crm_accounts
+  const contact = Array.isArray(inv.crm_contacts) ? inv.crm_contacts[0] : inv.crm_contacts
+  const buyerContactName = contact
+    ? [contact.first_name, contact.last_name].filter(Boolean).join(' ').trim() || null
+    : null
+  // Phone preference: explicit phone column, else mobile.
+  const buyerContactPhone = contact?.phone ?? contact?.mobile ?? null
 
   // Build buyer_address with fallback priority:
   //   1. Snapshot column on the invoice (Phase 5)
@@ -929,6 +985,8 @@ export async function loadInvoiceForPdf(
     sgst_amount: inv.sgst_amount ?? '0',
     igst_amount: inv.igst_amount ?? '0',
     buyer_name: inv.buyer_name ?? account?.name ?? null,
+    buyer_contact_name: buyerContactName,
+    buyer_contact_phone: buyerContactPhone,
     buyer_gstin: inv.buyer_gstin ?? account?.gstin ?? null,
     buyer_address: resolvedBuyerAddress,
     buyer_state: resolvedBuyerState,

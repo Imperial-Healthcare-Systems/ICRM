@@ -69,7 +69,9 @@ function buildSample(type: 'intra' | 'inter' | 'b2c' | 'verify' | 'verify-intra'
       cgst_amount: '0',
       sgst_amount: '0',
       igst_amount: '0',
-      buyer_name: 'Ajay M A',
+      buyer_name: 'Indiranagar Wellness Pvt Ltd',
+      buyer_contact_name: 'Ajay M A',
+      buyer_contact_phone: '+91 98765 43210',
       buyer_gstin: '32AANFL2294C1ZH',
       buyer_address: {
         line1: '123 MG Road, Indiranagar',
