@@ -21,7 +21,7 @@
 import { jsPDF } from 'jspdf'
 import {
   formatINRPlain, amountInWords, toDecimal, multiply,
-  determineGstSplit, stateCodeFromGstin,
+  determineGstSplit, stateCodeFromGstin, formatPlaceOfSupply,
   type MoneyInput,
 } from '@/lib/money'
 import { WATERMARK_LINES, LEGAL_SELLER_LINE } from '@/lib/branding-constants'
@@ -80,6 +80,15 @@ export function normalizeLineItems(items: InvoiceLineItem[]): InvoiceLineItem[] 
   })
 }
 
+/** One row in the invoice's payment ledger (crm_invoice_payments). */
+export type InvoicePaymentRow = {
+  amount: number | string
+  payment_method: string | null
+  reference: string | null
+  paid_at: string | null
+  paid_by: string | null
+}
+
 export type InvoicePdfData = {
   invoice_number: string
   status: string
@@ -87,6 +96,8 @@ export type InvoicePdfData = {
   due_date: string | null
   paid_date: string | null
   items: InvoiceLineItem[]
+  /** Optional payment history. When empty/missing, the section is omitted. */
+  payments?: InvoicePaymentRow[]
   subtotal: number | string
   tax_pct: number | string
   total: number | string
@@ -213,7 +224,17 @@ export function buildInvoicePdf(data: InvoicePdfData): Uint8Array {
   doc.setFont('helvetica', 'bold')
   doc.setFontSize(10)
   doc.setTextColor(...WHITE)
-  doc.text(data.place_of_supply ?? '—', rightX, 86, { align: 'right' })
+  // Derive Place of Supply when the stored snapshot is missing
+  // (pre-Phase-5 invoices). Priority:
+  //   1. data.place_of_supply (snapshot)
+  //   2. data.buyer_state_code (snapshot or M120 structured address fallback)
+  //   3. first 2 chars of the buyer's GSTIN
+  //   4. "—"
+  const effectivePosCode =
+    data.buyer_state_code ?? stateCodeFromGstin(data.buyer_gstin) ?? null
+  const effectivePos =
+    data.place_of_supply ?? (effectivePosCode ? formatPlaceOfSupply(effectivePosCode) : '—')
+  doc.text(effectivePos, rightX, 86, { align: 'right' })
 
   let y = 130
 
@@ -604,7 +625,107 @@ export function buildInvoicePdf(data: InvoicePdfData): Uint8Array {
     }
   }
 
-  y += 8
+  y += 18  // breathing room above the payment-history label
+
+  // ── Payment history table (only if payments are recorded) ─────────
+  // Renders one row per crm_invoice_payments entry. Same paginate-on-overflow
+  // pattern as the line items table.
+  const payments = data.payments ?? []
+  if (payments.length > 0) {
+    if (y > PAGE_H - 180) { doc.addPage(); y = 50 }
+    doc.setFont('helvetica', 'bold')
+    doc.setFontSize(8)
+    doc.setTextColor(...SLATE_400)
+    doc.text(`PAYMENT HISTORY  (${payments.length})`, MARGIN_X, y)
+    y += 18  // gap between label and the header band
+
+    // Column layout with consistent inner padding.
+    type PCol = { key: string; label: string; w: number; align: 'left' | 'right' | 'center' }
+    const pCols: PCol[] = [
+      { key: 'date',   label: 'DATE',      w: 80,  align: 'left' },
+      { key: 'method', label: 'METHOD',    w: 80,  align: 'left' },
+      { key: 'ref',    label: 'REFERENCE', w: 140, align: 'left' },
+      { key: 'by',     label: 'PAID BY',   w: 130, align: 'left' },
+      { key: 'amount', label: 'AMOUNT',    w: 93,  align: 'right' },
+    ]
+    const cellPadL = 8   // left cell padding
+    const cellPadR = 8   // right cell padding
+
+    // Header band (taller for breathing room)
+    const headerBandH = 22
+    doc.setFillColor(...NAVY)
+    doc.rect(MARGIN_X, y - 14, CONTENT_W, headerBandH, 'F')
+    doc.setTextColor(...WHITE)
+    doc.setFont('helvetica', 'bold')
+    doc.setFontSize(8)
+    {
+      let cx = MARGIN_X
+      for (const c of pCols) {
+        const tx = c.align === 'right' ? cx + c.w - cellPadR : cx + cellPadL
+        doc.text(c.label, tx, y, { align: c.align })
+        cx += c.w
+      }
+    }
+    y += 18  // gap between header and first row
+
+    doc.setFont('helvetica', 'normal')
+    doc.setFontSize(9)
+    doc.setTextColor(...SLATE_900)
+    const methodLabel: Record<string, string> = {
+      bank_transfer: 'Bank Transfer',
+      cash: 'Cash',
+      cheque: 'Cheque',
+      upi: 'UPI',
+      card: 'Card',
+      online: 'Online',
+      other: 'Other',
+    }
+
+    const rowH = 18  // taller rows so text has vertical breathing room
+
+    for (let i = 0; i < payments.length; i++) {
+      const p = payments[i]
+      if (y + rowH > PAGE_H - 120) { doc.addPage(); y = 50 }
+
+      // Alternating row fill — sit slightly above text baseline for centered look
+      if (i % 2 === 1) {
+        doc.setFillColor(248, 250, 252)
+        doc.rect(MARGIN_X, y - 12, CONTENT_W, rowH, 'F')
+      }
+
+      let cx = MARGIN_X
+      for (const c of pCols) {
+        const tx = c.align === 'right' ? cx + c.w - cellPadR : cx + cellPadL
+        let value = ''
+        switch (c.key) {
+          case 'date':
+            value = fmtDate(p.paid_at)
+            break
+          case 'method':
+            value = p.payment_method ? (methodLabel[p.payment_method] ?? p.payment_method) : '—'
+            break
+          case 'ref': {
+            // Truncate long references that would overflow the column.
+            const ref = p.reference ?? '—'
+            value = ref.length > 22 ? ref.slice(0, 20) + '…' : ref
+            break
+          }
+          case 'by':
+            value = p.paid_by ?? '—'
+            break
+          case 'amount':
+            value = formatPDFCurrency(p.amount)
+            break
+        }
+        doc.text(value, tx, y, { align: c.align })
+        cx += c.w
+      }
+      doc.setDrawColor(...SLATE_200)
+      doc.line(MARGIN_X, y - 12 + rowH, MARGIN_X + CONTENT_W, y - 12 + rowH)
+      y += rowH
+    }
+    y += 22  // breathing room before the next section (Amount in Words)
+  }
 
   // ── Amount in words ───────────────────────────────────────────────
   if (y > PAGE_H - 200) { doc.addPage(); y = 50 }
@@ -761,6 +882,34 @@ export async function loadInvoiceForPdf(
   const resolvedBuyerState     = inv.buyer_state      ?? account?.billing_state      ?? null
   const resolvedBuyerStateCode = inv.buyer_state_code ?? account?.billing_state_code ?? null
 
+  // ── Payment history ─────────────────────────────────────────────────
+  // Fetched separately because it lives in crm_invoice_payments. Joined
+  // with crm_users to get the recorder's full name. Sorted ascending so
+  // the table reads chronologically (oldest payment first).
+  const { data: paymentsRaw } = await supabaseAdmin
+    .from('crm_invoice_payments')
+    .select(`
+      amount, payment_method, reference, paid_at,
+      crm_users!created_by(full_name)
+    `)
+    .eq('invoice_id', invoiceId)
+    .order('paid_at', { ascending: true }) as { data: Array<{
+      amount: string; payment_method: string | null; reference: string | null;
+      paid_at: string | null;
+      crm_users: { full_name: string | null } | { full_name: string | null }[] | null;
+    }> | null }
+
+  const payments: InvoicePaymentRow[] = (paymentsRaw ?? []).map(p => {
+    const u = Array.isArray(p.crm_users) ? p.crm_users[0] : p.crm_users
+    return {
+      amount: p.amount,
+      payment_method: p.payment_method,
+      reference: p.reference,
+      paid_at: p.paid_at,
+      paid_by: u?.full_name ?? null,
+    }
+  })
+
   return {
     invoice_number: inv.invoice_number,
     status: inv.status,
@@ -768,6 +917,7 @@ export async function loadInvoiceForPdf(
     due_date: inv.due_date,
     paid_date: inv.paid_date,
     items: (inv.items ?? []) as InvoiceLineItem[],
+    payments,
     subtotal: inv.subtotal,
     tax_pct: inv.tax_pct,
     total: inv.total,
@@ -785,20 +935,28 @@ export async function loadInvoiceForPdf(
     buyer_state_code: resolvedBuyerStateCode,
     seller_state_code: inv.seller_state_code,
     place_of_supply: inv.place_of_supply,
-    organisation: {
-      name: org?.name ?? 'Your Organisation',
-      legal_name: org?.name === 'Imperial Tech Innovations' ? 'Imperial Healthcare Systems Pvt Ltd' : org?.name,
-      gstin: org?.gstin ?? null,
-      cin: org?.gstin === '06AAICI5025Q1Z6' ? 'U62099HR2025PTC137921' : null,
-      pan: org?.pan,
-      phone: org?.phone ?? org?.contact_phone ?? null,
-      email: org?.email ?? org?.billing_email ?? null,
-      website: org?.website,
-      address: org?.address,
-      state: org?.state,
-      state_code: org?.state_code,
-      logo_url: org?.logo_url,
-    },
+    organisation: (() => {
+      // Imperial-branded invoices get the canonical seller identity even
+      // when the organisations row is sparsely populated (legacy seeds,
+      // missing gstin/cin/state). For non-Imperial tenants, falls through
+      // to whatever the org row provides.
+      const isImperial = org?.name === 'Imperial Tech Innovations'
+        || org?.gstin === '06AAICI5025Q1Z6'
+      return {
+        name: org?.name ?? 'Your Organisation',
+        legal_name: isImperial ? 'Imperial Healthcare Systems Pvt Ltd' : org?.name,
+        gstin: org?.gstin ?? (isImperial ? '06AAICI5025Q1Z6' : null),
+        cin:   isImperial ? 'U62099HR2025PTC137921' : null,
+        pan: org?.pan,
+        phone: org?.phone ?? org?.contact_phone ?? null,
+        email: org?.email ?? org?.billing_email ?? null,
+        website: org?.website,
+        address: org?.address,
+        state: org?.state ?? (isImperial ? 'Haryana' : null),
+        state_code: org?.state_code ?? (isImperial ? '06' : null),
+        logo_url: org?.logo_url,
+      }
+    })(),
     account_fallback: account
       ? { name: account.name, gstin: account.gstin, billing_address: account.billing_address }
       : null,

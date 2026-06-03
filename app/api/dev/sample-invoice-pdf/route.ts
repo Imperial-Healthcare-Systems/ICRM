@@ -85,6 +85,22 @@ function buildSample(type: 'intra' | 'inter' | 'b2c' | 'verify' | 'verify-intra'
       organisation: SELLER,
       hide_watermark: false,
       account_fallback: null,
+      payments: [
+        {
+          amount: '1674.50',
+          payment_method: 'online',
+          reference: '5673597120',
+          paid_at: '2026-05-28',
+          paid_by: 'Imperial Healthcare Admin',
+        },
+        {
+          amount: '2277.32',
+          payment_method: 'bank_transfer',
+          reference: 'YES0N6153180594100',
+          paid_at: '2026-06-02',
+          paid_by: 'Imperial Healthcare Admin',
+        },
+      ],
     }
   }
 
