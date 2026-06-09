@@ -74,12 +74,29 @@ export async function getSession(): Promise<Session | null> {
   const subscriptionStatus = typeof meta.subscription_status === 'string' ? meta.subscription_status : 'trial'
   const impersonatorAdminId = typeof meta.impersonator_admin_id === 'string' ? meta.impersonator_admin_id : null
 
+  // ── Resolve crm_users.id for the current identity + active org ──────
+  // session.user.id must be crm_users.id, not identities.id — every FK
+  // in the CRM (assigned_to, created_by, …) references crm_users(id).
+  // Routes that genuinely need the auth-level UUID read session.user.identityId.
+  let crmUserId: string | null = null
+  if (orgId) {
+    const { data: crmUser } = await supabaseAdmin
+      .from('crm_users')
+      .select('id')
+      .eq('identity_id', user.id)
+      .eq('org_id', orgId)
+      .maybeSingle() as { data: { id: string } | null }
+    crmUserId = crmUser?.id ?? null
+  }
+
   const session: Session = {
     user: {
-      // Under the Supabase Auth model, identityId IS the canonical user id
-      // (auth.uid() = identities.id by Phase B convention). Existing callers
-      // that read session.user.id transparently get the identity_id.
-      id: user.id,
+      // session.user.id = crm_users.id when one exists (so FK inserts to
+      // assigned_to/created_by/etc. resolve correctly). Falls back to the
+      // identity_id when no crm_users row exists for this identity in the
+      // active org — that path should be rare and any FK insert with it
+      // will fail loudly, surfacing a misconfigured user.
+      id: crmUserId ?? user.id,
       email: user.email ?? '',
       name: typeof user.user_metadata?.full_name === 'string' ? user.user_metadata.full_name : null,
       image: typeof user.user_metadata?.avatar_url === 'string' ? user.user_metadata.avatar_url : null,

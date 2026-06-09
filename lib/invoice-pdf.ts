@@ -852,7 +852,8 @@ export async function loadInvoiceForPdf(
     .from('crm_invoices')
     .select(`
       invoice_number, status, issue_date, due_date, paid_date,
-      items, subtotal, tax_pct, total, paid_amount, currency, notes, terms, org_id,
+      items, subtotal, tax_pct, total, paid_amount, currency, notes, terms,
+      org_id, account_id, contact_id,
       buyer_name, buyer_gstin, buyer_address, buyer_state, buyer_state_code,
       seller_state_code, place_of_supply,
       cgst_amount, sgst_amount, igst_amount,
@@ -882,7 +883,7 @@ export async function loadInvoiceForPdf(
     due_date: string | null; paid_date: string | null;
     items: InvoiceLineItem[]; subtotal: string; tax_pct: string; total: string;
     paid_amount: string; currency: string; notes: string | null; terms: string | null;
-    org_id: string;
+    org_id: string; account_id: string | null; contact_id: string | null;
     buyer_name: string | null; buyer_gstin: string | null; buyer_address: Record<string, unknown> | null;
     buyer_state: string | null; buyer_state_code: string | null;
     seller_state_code: string | null; place_of_supply: string | null;
@@ -904,7 +905,26 @@ export async function loadInvoiceForPdf(
     } | null }
 
   const account = Array.isArray(inv.crm_accounts) ? inv.crm_accounts[0] : inv.crm_accounts
-  const contact = Array.isArray(inv.crm_contacts) ? inv.crm_contacts[0] : inv.crm_contacts
+  let contact = Array.isArray(inv.crm_contacts) ? inv.crm_contacts[0] : inv.crm_contacts
+
+  // ── Contact fallback ────────────────────────────────────────────────
+  // When the invoice itself doesn't carry a contact_id (older invoices,
+  // or invoices created without a contact picker), surface the
+  // account's primary contact for the ATTENTION box. "Primary" =
+  // oldest by created_at, deterministic. A real contact-picker on the
+  // new-invoice form is a separate enhancement.
+  if (!contact && inv.account_id) {
+    const { data: accountContact } = await supabaseAdmin
+      .from('crm_contacts')
+      .select('first_name, last_name, phone, mobile')
+      .eq('account_id', inv.account_id)
+      .eq('org_id', inv.org_id)
+      .order('created_at', { ascending: true })
+      .limit(1)
+      .maybeSingle() as { data: ContactRow | null }
+    if (accountContact) contact = accountContact
+  }
+
   const buyerContactName = contact
     ? [contact.first_name, contact.last_name].filter(Boolean).join(' ').trim() || null
     : null

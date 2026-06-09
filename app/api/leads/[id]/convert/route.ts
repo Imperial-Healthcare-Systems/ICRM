@@ -28,10 +28,48 @@ export async function POST(
     return NextResponse.json({ error: 'Lead is already converted.' }, { status: 409 })
   }
 
+  // ── 1. Resolve the account FIRST so the contact can be linked to it. ─
+  // Match an existing account by name (case-insensitive) before creating
+  // a new one so converting two leads from the same company doesn't
+  // produce duplicate accounts.
+  let accountId: string | null = null
+  if (lead.company) {
+    const { data: existingAccount } = await supabase
+      .from('crm_accounts')
+      .select('id')
+      .eq('org_id', orgId)
+      .ilike('name', lead.company)
+      .limit(1)
+      .maybeSingle()
+
+    if (existingAccount) {
+      accountId = existingAccount.id
+    } else {
+      const { data: newAccount } = await supabase
+        .from('crm_accounts')
+        .insert({
+          org_id: orgId,
+          name: lead.company,
+          // Carry forward what we know from the lead. GSTIN + billing
+          // address still need to be enriched manually via the account
+          // edit page before invoicing. (`industry` isn't on crm_leads,
+          // so we don't transfer it — it's an account-only field.)
+          phone: lead.phone ?? null,
+          account_type: 'customer',
+          created_by: actorId,
+        })
+        .select('id')
+        .single()
+      if (newAccount) accountId = newAccount.id
+    }
+  }
+
+  // ── 2. Create the contact with account_id already wired. ─────────────
   const { data: contact, error: contactError } = await supabase
     .from('crm_contacts')
     .insert({
       org_id: orgId,
+      account_id: accountId,
       first_name: lead.first_name,
       last_name: lead.last_name,
       email: lead.email,
@@ -47,28 +85,6 @@ export async function POST(
 
   if (contactError || !contact) {
     return NextResponse.json({ error: 'Failed to create contact.' }, { status: 500 })
-  }
-
-  let accountId: string | null = null
-  if (lead.company) {
-    const { data: existingAccount } = await supabase
-      .from('crm_accounts')
-      .select('id')
-      .eq('org_id', orgId)
-      .ilike('name', lead.company)
-      .limit(1)
-      .single()
-
-    if (existingAccount) {
-      accountId = existingAccount.id
-    } else {
-      const { data: newAccount } = await supabase
-        .from('crm_accounts')
-        .insert({ org_id: orgId, name: lead.company, created_by: actorId })
-        .select('id')
-        .single()
-      if (newAccount) accountId = newAccount.id
-    }
   }
 
   await supabase

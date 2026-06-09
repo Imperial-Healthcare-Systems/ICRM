@@ -1,11 +1,11 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import PageHeader from '@/components/PageHeader'
 import Select from '@/components/ui/Select'
 import toast from 'react-hot-toast'
-import { Loader2 } from 'lucide-react'
+import { Loader2, AlertTriangle } from 'lucide-react'
 import { GST_STATE_CODES, isValidGstin } from '@/lib/money'
 
 // State name → state code map for the dropdown.
@@ -37,6 +37,40 @@ export default function NewAccountPage() {
   // Live GSTIN format check — soft warning, doesn't block save (B2C accounts).
   const gstinTouched = form.gstin.length > 0
   const gstinOk = !gstinTouched || isValidGstin(form.gstin.toUpperCase())
+
+  // ── Name-collision guardrail ──────────────────────────────────────
+  // An Account is a legal entity (company). When a user types a name
+  // that matches an existing Contact's full name in the same org, it's
+  // almost always the lead-conversion bug repeating: they meant to add
+  // a company but typed the person's name. Non-blocking yellow banner.
+  const [contactNameMatch, setContactNameMatch] = useState<{
+    contact_id: string; first_name: string; last_name: string | null;
+  } | null>(null)
+
+  useEffect(() => {
+    const trimmed = form.name.trim()
+    if (trimmed.length < 2) { setContactNameMatch(null); return }
+    let cancelled = false
+    const t = setTimeout(async () => {
+      try {
+        const res = await fetch(`/api/contacts?search=${encodeURIComponent(trimmed)}&pageSize=10`)
+        if (!res.ok) return
+        const { data } = await res.json() as { data: Array<{
+          id: string; first_name: string; last_name: string | null;
+        }> | null }
+        if (cancelled) return
+        const target = trimmed.toLowerCase()
+        const match = (data ?? []).find(c => {
+          const full = `${c.first_name ?? ''} ${c.last_name ?? ''}`.trim().toLowerCase()
+          return full === target
+        })
+        setContactNameMatch(match
+          ? { contact_id: match.id, first_name: match.first_name, last_name: match.last_name }
+          : null)
+      } catch { /* network blip — silent */ }
+    }, 300)
+    return () => { cancelled = true; clearTimeout(t) }
+  }, [form.name])
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -97,6 +131,16 @@ export default function NewAccountPage() {
           <div className="col-span-2">
             <label className={labelCls}>Company Name *</label>
             <input required className={inputCls} placeholder="Acme Corp" value={form.name} onChange={e => update('name', e.target.value)} />
+            {contactNameMatch && (
+              <div className="mt-2 flex items-start gap-2 rounded-lg border border-yellow-500/30 bg-yellow-500/10 px-3 py-2 text-xs text-yellow-200">
+                <AlertTriangle className="w-3.5 h-3.5 shrink-0 mt-0.5" />
+                <span>
+                  <strong>{`${contactNameMatch.first_name} ${contactNameMatch.last_name ?? ''}`.trim()}</strong> is an existing contact in this org.
+                  An Account represents the company; the person belongs in Contacts.
+                  Did you mean the company name (e.g. their employer)?
+                </span>
+              </div>
+            )}
           </div>
           <div>
             <label className={labelCls}>Website</label>
